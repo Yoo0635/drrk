@@ -1,0 +1,47 @@
+# Version control
+.git
+.gitignore
+.gitattributes
+.github
+
+# IDEs and local tooling
+.idea
+.vscode
+.omx
+**/*.iml
+
+# OS files
+.DS_Store
+**/.DS_Store
+Thumbs.db
+
+# Environment variables and secrets
+.env
+.env.*
+**/.env
+**/.env.*
+
+# React / Node.js dependencies and outputs
+**/node_modules
+**/dist
+**/.vite
+**/.cache
+**/coverage
+**/.eslintcache
+**/*.tsbuildinfo
+
+# Spring / Gradle / Maven dependencies and outputs
+**/.gradle
+**/build
+**/target
+**/out
+**/*.class
+**/*.hprof
+**/hs_err_pid*
+
+# Logs and temporary files
+**/*.log
+**/logs
+**/*.tmp
+**/*.temp
+**/*.bak

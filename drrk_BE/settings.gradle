@@ -1,0 +1,8 @@
+rootProject.name = 'drrk-be'
+
+include 'common'
+include 'collector'
+include 'main'
+
+project(':collector').projectDir = file('app-collector')
+project(':main').projectDir = file('app-main')

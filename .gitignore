@@ -1,0 +1,84 @@
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDEs and editors
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+
+# AI Agents & Assistant Configurations
+AGENTS.md
+agents.md
+AGENTS_*.md
+*AGENTS*.md
+.omx/
+.agents/
+.agent/
+.aidea/
+.claude/
+.cline/
+.roo/
+.windsurf/
+.cursor/
+.codeium/
+.devin/
+.cursorrules
+.cursorignore
+.copilotignore
+.clinerules
+.roomodes
+*.agent.log
+*.agent.json
+.agent-history/
+.agent-cache/
+.agent-store/
+
+# Environment variables and local secrets
+.env
+.env.*
+!.env.example
+!**/.env.example
+.env.agent
+.env.agent.local
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# React / Node.js
+**/node_modules/
+**/dist/
+**/.vite/
+**/.cache/
+**/coverage/
+**/.eslintcache
+**/*.tsbuildinfo
+
+# Spring / Gradle / Maven
+**/.gradle/
+**/build/
+**/target/
+**/out/
+*.class
+*.hprof
+hs_err_pid*
+
+# Local Spring configuration
+**/application-local.properties
+**/application-local.yml
+**/application-local.yaml
+**/application-secret.properties
+**/application-secret.yml
+**/application-secret.yaml
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
