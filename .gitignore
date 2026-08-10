@@ -14,6 +14,8 @@ AGENTS.md
 agents.md
 AGENTS_*.md
 *AGENTS*.md
+**/spec.md
+**/memory.md
 .omx/
 .agents/
 .agent/
