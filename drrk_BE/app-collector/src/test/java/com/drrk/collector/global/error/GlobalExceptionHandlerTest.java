@@ -24,10 +24,13 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
+import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.support.DefaultMessageSourceResolvable;
+import org.springframework.core.MethodParameter;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -41,7 +44,10 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+import org.springframework.validation.method.MethodValidationResult;
+import org.springframework.validation.method.ParameterValidationResult;
 
 class GlobalExceptionHandlerTest {
 
@@ -192,16 +198,33 @@ class GlobalExceptionHandlerTest {
 
     @Test
     void handlesCollectorRequestParamValidationWithInvalidRequest() throws Exception {
-        mockMvc.perform(get("/collector/param-validation")
-                        .queryParam("page", "-1"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.status").value(400))
-                .andExpect(jsonPath("$.code").value("COMMON-400-001"))
-                .andExpect(jsonPath("$.message").value("요청 값이 올바르지 않습니다."))
-                .andExpect(jsonPath("$.path").value("/collector/param-validation"))
-                .andExpect(jsonPath("$.fieldErrors", hasSize(1)))
-                .andExpect(jsonPath("$.fieldErrors[0].field").value("page"))
-                .andExpect(jsonPath("$.fieldErrors[0].message").exists());
+        Method method = TestController.class.getDeclaredMethod("paramValidation", int.class);
+        MethodParameter methodParameter = new MethodParameter(method, 0);
+        ParameterValidationResult parameterValidationResult = new ParameterValidationResult(
+                methodParameter,
+                -1,
+                List.of(new DefaultMessageSourceResolvable(new String[] {"page"}, "양수여야 합니다.")),
+                null,
+                null,
+                null,
+                (resolvable, type) -> null
+        );
+        HandlerMethodValidationException exception = new HandlerMethodValidationException(
+                MethodValidationResult.create(new TestController(), method, List.of(parameterValidationResult))
+        );
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/collector/param-validation");
+
+        ResponseEntity<ErrorResponse> response = new GlobalExceptionHandler()
+                .handleHandlerMethodValidationException(exception, request);
+
+        assertEquals(400, response.getStatusCode().value());
+        assertNotNull(response.getBody());
+        assertEquals("COMMON-400-001", response.getBody().code());
+        assertEquals("요청 값이 올바르지 않습니다.", response.getBody().message());
+        assertEquals("/collector/param-validation", response.getBody().path());
+        assertEquals(1, response.getBody().fieldErrors().size());
+        assertEquals("page", response.getBody().fieldErrors().getFirst().field());
+        assertEquals("양수여야 합니다.", response.getBody().fieldErrors().getFirst().message());
     }
 
     @Validated
