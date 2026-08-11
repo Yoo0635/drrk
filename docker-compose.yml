@@ -3,15 +3,15 @@ services:
     image: postgres:16-alpine
     container_name: drrk-postgresql
     environment:
-      POSTGRES_DB: drrk
-      POSTGRES_USER: drrk
-      POSTGRES_PASSWORD: drrk
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
       - "5432:5432"
     volumes:
       - postgresql-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U drrk -d drrk"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -20,18 +20,13 @@ services:
     image: rabbitmq:3-management-alpine
     container_name: drrk-rabbitmq
     environment:
-      RABBITMQ_DEFAULT_USER: drrk
-      RABBITMQ_DEFAULT_PASS: drrk
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
     ports:
       - "5672:5672"
       - "15672:15672"
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
 
   redis:
     image: redis:7-alpine
@@ -40,11 +35,6 @@ services:
       - "6379:6379"
     volumes:
       - redis-data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
 
   app-main:
     build:
@@ -52,24 +42,17 @@ services:
       dockerfile: app-main/Dockerfile
     container_name: drrk-app-main
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgresql:5432/drrk
-      SPRING_DATASOURCE_USERNAME: drrk
-      SPRING_DATASOURCE_PASSWORD: drrk
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgresql:5432/${POSTGRES_DB}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
+
       SPRING_RABBITMQ_HOST: rabbitmq
       SPRING_RABBITMQ_PORT: 5672
-      SPRING_RABBITMQ_USERNAME: drrk
-      SPRING_RABBITMQ_PASSWORD: drrk
-    ports:
-      - "8080:8080"
-    depends_on:
-      postgresql:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
 
   app-collector:
     build:
@@ -79,15 +62,5 @@ services:
     environment:
       SPRING_RABBITMQ_HOST: rabbitmq
       SPRING_RABBITMQ_PORT: 5672
-      SPRING_RABBITMQ_USERNAME: drrk
-      SPRING_RABBITMQ_PASSWORD: drrk
-    ports:
-      - "8081:8080"
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-
-volumes:
-  postgresql-data:
-  rabbitmq-data:
-  redis-data:
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
