@@ -10,6 +10,7 @@ import jakarta.validation.Validation;
 import jakarta.validation.Validator;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import java.util.List;
 import java.util.Set;
@@ -22,6 +23,7 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -188,6 +190,21 @@ class GlobalExceptionHandlerTest {
                 .andExpect(jsonPath("$.message", not(containsString("database password"))));
     }
 
+    @Test
+    void handlesHandlerMethodValidationExceptionForRequestParam() throws Exception {
+        mockMvc.perform(get("/test/validated-param")
+                        .queryParam("count", "-1"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.code").value("COMMON-400-001"))
+                .andExpect(jsonPath("$.message").value("요청 값이 올바르지 않습니다."))
+                .andExpect(jsonPath("$.path").value("/test/validated-param"))
+                .andExpect(jsonPath("$.fieldErrors", hasSize(1)))
+                .andExpect(jsonPath("$.fieldErrors[0].field").value("count"))
+                .andExpect(jsonPath("$.fieldErrors[0].message").value("양수여야 합니다."));
+    }
+
+    @Validated
     @RestController
     private static class TestController {
 
@@ -206,6 +223,10 @@ class GlobalExceptionHandlerTest {
 
         @GetMapping("/test/type")
         void type(@RequestParam("value") int value) {
+        }
+
+        @GetMapping("/test/validated-param")
+        void validatedParam(@RequestParam("count") @Positive(message = "양수여야 합니다.") int count) {
         }
 
         @GetMapping("/test/unexpected")

@@ -22,6 +22,7 @@ import jakarta.validation.Validation;
 import jakarta.validation.Validator;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import java.util.List;
 import java.util.Set;
@@ -34,6 +35,7 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -188,6 +190,21 @@ class GlobalExceptionHandlerTest {
                 .andExpect(jsonPath("$.message", not(containsString("vendor token"))));
     }
 
+    @Test
+    void handlesCollectorRequestParamValidationWithInvalidRequest() throws Exception {
+        mockMvc.perform(get("/collector/param-validation")
+                        .queryParam("page", "-1"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.code").value("COMMON-400-001"))
+                .andExpect(jsonPath("$.message").value("요청 값이 올바르지 않습니다."))
+                .andExpect(jsonPath("$.path").value("/collector/param-validation"))
+                .andExpect(jsonPath("$.fieldErrors", hasSize(1)))
+                .andExpect(jsonPath("$.fieldErrors[0].field").value("page"))
+                .andExpect(jsonPath("$.fieldErrors[0].message").exists());
+    }
+
+    @Validated
     @RestController
     private static class TestController {
 
@@ -206,6 +223,10 @@ class GlobalExceptionHandlerTest {
 
         @GetMapping("/collector/type")
         void type(@RequestParam("limit") int limit) {
+        }
+
+        @GetMapping("/collector/param-validation")
+        void paramValidation(@RequestParam("page") @Positive int page) {
         }
 
         @GetMapping("/collector/unexpected")

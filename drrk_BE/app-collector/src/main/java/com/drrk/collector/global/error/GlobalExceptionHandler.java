@@ -18,6 +18,7 @@ import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
@@ -75,6 +76,32 @@ public class GlobalExceptionHandler {
                 .toList();
 
         log.debug("Constraint violation. code={}, path={}, fields={}",
+                CommonErrorCode.INVALID_REQUEST.getCode(),
+                request.getRequestURI(),
+                fieldErrors.stream().map(FieldErrorResponse::field).toList());
+
+        return build(CommonErrorCode.INVALID_REQUEST, request, fieldErrors);
+    }
+
+    @ExceptionHandler(HandlerMethodValidationException.class)
+    public ResponseEntity<ErrorResponse> handleHandlerMethodValidationException(
+            HandlerMethodValidationException exception,
+            HttpServletRequest request
+    ) {
+        Map<String, String> errors = new LinkedHashMap<>();
+        exception.getAllValidationResults().forEach(result -> {
+            String fieldName = result.getMethodParameter().getParameterName();
+            if (fieldName != null) {
+                result.getResolvableErrors().forEach(error ->
+                        errors.putIfAbsent(fieldName, error.getDefaultMessage())
+                );
+            }
+        });
+        List<FieldErrorResponse> fieldErrors = errors.entrySet().stream()
+                .map(entry -> new FieldErrorResponse(entry.getKey(), entry.getValue()))
+                .toList();
+
+        log.debug("Method parameter validation failed. code={}, path={}, fields={}",
                 CommonErrorCode.INVALID_REQUEST.getCode(),
                 request.getRequestURI(),
                 fieldErrors.stream().map(FieldErrorResponse::field).toList());
