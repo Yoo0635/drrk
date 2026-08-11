@@ -10,6 +10,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.LocalDateTime;
+import java.util.Objects;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -53,4 +54,23 @@ public class User {
 
 	@Column(name = "deleted_at", nullable = true)
 	private LocalDateTime deletedAt;
+
+	public static User emailUser(
+			String email,
+			String password,
+			String nickname,
+			LocalDateTime emailVerifiedAt
+	) {
+		User user = new User();
+		user.email = Objects.requireNonNull(email, "email");
+		user.password = Objects.requireNonNull(password, "password");
+		user.loginType = LoginType.EMAIL;
+		user.providerUserId = null;
+		user.nickname = Objects.requireNonNull(nickname, "nickname");
+		user.status = UserStatus.ACTIVE;
+		user.emailVerifiedAt = Objects.requireNonNull(emailVerifiedAt, "emailVerifiedAt");
+		user.createdAt = LocalDateTime.now();
+		user.deletedAt = null;
+		return user;
+	}
 }
