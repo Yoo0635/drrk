@@ -5,7 +5,7 @@ Thumbs.db
 # IDEs and editors
 .idea/
 *.iml
-.vscode/
+.vscode/*
 *.swp
 *.swo
 
@@ -100,7 +100,6 @@ dist-ssr
 *.local
 
 # Editor directories and files
-.vscode/*
 !.vscode/extensions.json
 .idea
 .DS_Store
