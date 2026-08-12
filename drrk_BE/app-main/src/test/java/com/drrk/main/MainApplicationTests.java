@@ -16,7 +16,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 		"spring.mail.host=smtp.example.com",
 		"spring.mail.port=587",
 		"spring.mail.username=test@example.com",
-		"spring.mail.password=test-password"
+		"spring.mail.password=test-password",
+		"auth.jwt-secret=MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTI="
 })
 class MainApplicationTests {
 

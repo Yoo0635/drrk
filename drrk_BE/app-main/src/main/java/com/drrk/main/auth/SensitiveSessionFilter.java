@@ -7,17 +7,14 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import org.springframework.data.redis.RedisConnectionFailureException;
-import org.springframework.http.HttpMethod;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
-import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.web.servlet.HandlerExceptionResolver;
 
 public class SensitiveSessionFilter extends OncePerRequestFilter {
 
-	private static final RequestMatcher SENSITIVE_MATCHER = new AntPathRequestMatcher("/api/v1/users/me", HttpMethod.GET.name());
+	private static final String USERS_ME_PATH = "/api/v1/users/me";
 
 	private final RefreshSessionStore refreshSessionStore;
 	private final HandlerExceptionResolver exceptionResolver;
@@ -61,6 +58,6 @@ public class SensitiveSessionFilter extends OncePerRequestFilter {
 	}
 
 	private static boolean isSensitive(HttpServletRequest request) {
-		return SENSITIVE_MATCHER.matches(request);
+		return "GET".equals(request.getMethod()) && USERS_ME_PATH.equals(request.getRequestURI());
 	}
 }

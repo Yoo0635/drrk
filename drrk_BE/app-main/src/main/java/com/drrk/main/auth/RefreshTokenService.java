@@ -8,8 +8,6 @@ import java.util.UUID;
 
 public class RefreshTokenService {
 
-	private static final Duration REUSE_GRACE_WINDOW = Duration.ofSeconds(30);
-
 	private final RefreshSessionStore store;
 	private final TokenGenerator tokenGenerator;
 	private final Sha256TokenHasher tokenHasher;
@@ -85,18 +83,6 @@ public class RefreshTokenService {
 	}
 
 	private RotatedRefreshToken handleReusedToken(UsedRefreshToken usedToken) {
-		Instant now = clock.instant();
-		Duration timeSinceUse = Duration.between(usedToken.usedAt(), now);
-
-		if (timeSinceUse.compareTo(REUSE_GRACE_WINDOW) <= 0) {
-			return store.findActive(usedToken.replacementTokenHash())
-					.map(session -> rotateActiveToken(usedToken.replacementTokenHash(), session, now))
-					.orElseGet(() -> {
-						store.deleteAllByUserId(usedToken.userId());
-						throw new BusinessException(AuthErrorCode.REFRESH_TOKEN_REUSED);
-					});
-		}
-
 		store.deleteAllByUserId(usedToken.userId());
 		throw new BusinessException(AuthErrorCode.REFRESH_TOKEN_REUSED);
 	}
