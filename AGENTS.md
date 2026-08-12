@@ -29,6 +29,10 @@
 ## Planning Files
 
 - 구현 전에 루트 `spec.md`에 현재 이슈의 목표, 범위, 설계, 검증 방법을 작성한다.
+- 사용자가 설계를 요청하면 결과를 루트 `spec.md`에 기록한다.
+- `spec.md`는 핵심 결정, 주요 흐름, 검증 방법 위주로 짧고 읽기 쉽게 작성한다. 사용자가 요구하지 않은 세부 구현 설명으로 문서를 과도하게 늘리지 않는다.
+- `spec.md`를 새로 만들거나 수정하기 전에 `docs/spec-template.md`를 읽고 해당 문서의 필수 구조, 작성 규칙, 완료 점검을 따른다.
+- `docs/spec-template.md`와 이 문서의 규칙이 충돌하면 `AGENTS.md`를 우선한다.
 - 루트 `memory.md`에는 진행 상황, 주요 결정, 완료한 검증, 다음 작업을 기록한다.
 - 설계 문서는 루트 `spec.md` 하나만 사용한다.
 - 구현 중 별도의 계획 문서나 하위 `spec.md`를 추가로 만들지 않는다.
@@ -40,6 +44,8 @@
 ```text
 Tomorrow_Hackathon/
 ├─ AGENTS.md
+├─ docs/
+│  └─ spec-template.md
 ├─ spec.md
 ├─ memory.md
 └─ drrk_BE/

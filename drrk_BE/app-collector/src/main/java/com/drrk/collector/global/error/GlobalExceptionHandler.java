@@ -89,7 +89,7 @@ public class GlobalExceptionHandler {
             HttpServletRequest request
     ) {
         Map<String, String> errors = new LinkedHashMap<>();
-        exception.getAllValidationResults().forEach(result -> {
+        exception.getParameterValidationResults().forEach(result -> {
             String fieldName = result.getMethodParameter().getParameterName();
             if (fieldName != null) {
                 result.getResolvableErrors().forEach(error ->
