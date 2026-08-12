@@ -19,6 +19,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 		"spring.mail.username=test@example.com",
 		"spring.mail.password=test-password",
 		"inference.consumer.auto-startup=false",
+		"congestion.consumer.auto-startup=false",
 		"auth.jwt-secret=MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTI="
 })
 class MainApplicationTests {

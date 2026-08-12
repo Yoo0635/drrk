@@ -1,6 +1,10 @@
 spring:
   application:
     name: main
+  rabbitmq:
+    listener:
+      simple:
+        default-requeue-rejected: false
   sql:
     init:
       mode: always
@@ -34,3 +38,7 @@ auth:
     same-site: ${COOKIE_SAME_SITE:Lax}
     domain: ${COOKIE_DOMAIN:}
   cors-allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
+
+congestion:
+  consumer:
+    auto-startup: ${CONGESTION_CONSUMER_AUTO_STARTUP:true}
