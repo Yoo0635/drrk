@@ -30,6 +30,7 @@ import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.support.DefaultMessageSourceResolvable;
+import org.springframework.core.DefaultParameterNameDiscoverer;
 import org.springframework.core.MethodParameter;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
@@ -200,6 +201,7 @@ class GlobalExceptionHandlerTest {
     void handlesCollectorRequestParamValidationWithInvalidRequest() throws Exception {
         Method method = TestController.class.getDeclaredMethod("paramValidation", int.class);
         MethodParameter methodParameter = new MethodParameter(method, 0);
+        methodParameter.initParameterNameDiscovery(new DefaultParameterNameDiscoverer());
         ParameterValidationResult parameterValidationResult = new ParameterValidationResult(
                 methodParameter,
                 -1,

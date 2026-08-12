@@ -3,6 +3,7 @@ package com.drrk.main.auth;
 import java.time.Duration;
 import java.util.Optional;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Repository;
 
 @Repository
@@ -10,6 +11,14 @@ public class RedisEmailVerificationStore implements EmailVerificationStore {
 
 	private static final String CODE_PREFIX = "auth:email:code:";
 	private static final String TICKET_PREFIX = "auth:email:ticket:";
+
+	private static final String CONSUME_TICKET_SCRIPT = """
+			local email = redis.call('get', KEYS[1])
+			if email then
+			  redis.call('del', KEYS[1])
+			end
+			return email
+			""";
 
 	private final StringRedisTemplate redis;
 
@@ -40,10 +49,10 @@ public class RedisEmailVerificationStore implements EmailVerificationStore {
 	@Override
 	public Optional<String> consumeSignupTicket(String ticket) {
 		String key = TICKET_PREFIX + ticket;
-		String email = redis.opsForValue().get(key);
-		if (email != null) {
-			redis.delete(key);
-		}
+		String email = redis.execute(
+				new DefaultRedisScript<>(CONSUME_TICKET_SCRIPT, String.class),
+				java.util.List.of(key)
+		);
 		return Optional.ofNullable(email);
 	}
 }

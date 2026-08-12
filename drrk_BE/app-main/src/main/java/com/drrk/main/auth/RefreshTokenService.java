@@ -5,10 +5,10 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
-import org.springframework.stereotype.Service;
 
-@Service
 public class RefreshTokenService {
+
+	private static final Duration REUSE_GRACE_WINDOW = Duration.ofSeconds(30);
 
 	private final RefreshSessionStore store;
 	private final TokenGenerator tokenGenerator;
@@ -68,7 +68,7 @@ public class RefreshTokenService {
 				session.createdAt(),
 				now
 		);
-		UsedRefreshToken usedToken = new UsedRefreshToken(session.sessionId(), session.userId(), now);
+		UsedRefreshToken usedToken = new UsedRefreshToken(session.sessionId(), session.userId(), now, nextTokenHash);
 
 		boolean rotated = store.rotate(previousTokenHash, nextTokenHash, nextSession, usedToken, refreshTtl);
 		if (!rotated) {
@@ -85,6 +85,18 @@ public class RefreshTokenService {
 	}
 
 	private RotatedRefreshToken handleReusedToken(UsedRefreshToken usedToken) {
+		Instant now = clock.instant();
+		Duration timeSinceUse = Duration.between(usedToken.usedAt(), now);
+
+		if (timeSinceUse.compareTo(REUSE_GRACE_WINDOW) <= 0) {
+			return store.findActive(usedToken.replacementTokenHash())
+					.map(session -> rotateActiveToken(usedToken.replacementTokenHash(), session, now))
+					.orElseGet(() -> {
+						store.deleteAllByUserId(usedToken.userId());
+						throw new BusinessException(AuthErrorCode.REFRESH_TOKEN_REUSED);
+					});
+		}
+
 		store.deleteAllByUserId(usedToken.userId());
 		throw new BusinessException(AuthErrorCode.REFRESH_TOKEN_REUSED);
 	}

@@ -17,6 +17,13 @@ public class RedisRefreshSessionStore implements RefreshSessionStore {
 	private static final String USER_SESSIONS_PREFIX = "auth:user:";
 	private static final String USER_SESSIONS_SUFFIX = ":sessions";
 
+	private static final String SAVE_SCRIPT = """
+			redis.call('set', KEYS[1], ARGV[1], 'EX', ARGV[4])
+			redis.call('set', KEYS[2], ARGV[2], 'EX', ARGV[4])
+			redis.call('sadd', KEYS[3], ARGV[3])
+			redis.call('expire', KEYS[3], ARGV[4])
+			""";
+
 	private final StringRedisTemplate redis;
 
 	public RedisRefreshSessionStore(StringRedisTemplate redis) {
@@ -25,10 +32,18 @@ public class RedisRefreshSessionStore implements RefreshSessionStore {
 
 	@Override
 	public void save(String tokenHash, RefreshSession session, Duration ttl) {
-		redis.opsForValue().set(refreshKey(tokenHash), encode(session), ttl);
-		redis.opsForValue().set(sessionKey(session.sessionId()), session.userId() + "|" + tokenHash, ttl);
-		redis.opsForSet().add(userSessionsKey(session.userId()), session.sessionId());
-		redis.expire(userSessionsKey(session.userId()), ttl);
+		redis.execute(
+				new DefaultRedisScript<>(SAVE_SCRIPT, Void.class),
+				java.util.List.of(
+						refreshKey(tokenHash),
+						sessionKey(session.sessionId()),
+						userSessionsKey(session.userId())
+				),
+				encode(session),
+				session.userId() + "|" + tokenHash,
+				session.sessionId(),
+				String.valueOf(ttl.toSeconds())
+		);
 	}
 
 	@Override
@@ -133,7 +148,7 @@ public class RedisRefreshSessionStore implements RefreshSessionStore {
 	}
 
 	private String encode(UsedRefreshToken usedToken) {
-		return usedToken.sessionId() + "|" + usedToken.userId() + "|" + usedToken.usedAt();
+		return usedToken.sessionId() + "|" + usedToken.userId() + "|" + usedToken.usedAt() + "|" + usedToken.replacementTokenHash();
 	}
 
 	private RefreshSession decodeSession(String value) {
@@ -142,7 +157,7 @@ public class RedisRefreshSessionStore implements RefreshSessionStore {
 	}
 
 	private UsedRefreshToken decodeUsed(String value) {
-		String[] parts = value.split("\\|", 3);
-		return new UsedRefreshToken(parts[0], Long.valueOf(parts[1]), Instant.parse(parts[2]));
+		String[] parts = value.split("\\|", 4);
+		return new UsedRefreshToken(parts[0], Long.valueOf(parts[1]), Instant.parse(parts[2]), parts[3]);
 	}
 }

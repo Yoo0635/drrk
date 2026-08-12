@@ -29,6 +29,12 @@ public class CookieJwtAuthenticationFilter extends OncePerRequestFilter {
 			HttpServletResponse response,
 			FilterChain filterChain
 	) throws ServletException, IOException {
+		String path = request.getRequestURI();
+		if ("/api/v1/auth/refresh".equals(path) || "/api/v1/auth/login".equals(path) || "/api/v1/auth/logout".equals(path)) {
+			filterChain.doFilter(request, response);
+			return;
+		}
+
 		try {
 			String token = readCookie(request, CookieService.ACCESS_TOKEN_COOKIE);
 			if (token != null && SecurityContextHolder.getContext().getAuthentication() == null) {

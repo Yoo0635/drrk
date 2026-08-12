@@ -5,6 +5,7 @@ import java.time.Instant;
 public record UsedRefreshToken(
 		String sessionId,
 		Long userId,
-		Instant usedAt
+		Instant usedAt,
+		String replacementTokenHash
 ) {
 }

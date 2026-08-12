@@ -30,7 +30,7 @@ public class SecurityConfig {
 				.cors(Customizer.withDefaults())
 				.csrf(csrf -> csrf
 						.csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
-						.ignoringRequestMatchers("/api/v1/auth/login", "/api/v1/auth/refresh", "/api/v1/auth/logout",
+						.ignoringRequestMatchers("/api/v1/auth/login",
 								"/api/v1/auth/signup", "/api/v1/auth/email-verifications",
 								"/api/v1/auth/email-verifications/confirm"))
 				.authorizeHttpRequests(auth -> auth
