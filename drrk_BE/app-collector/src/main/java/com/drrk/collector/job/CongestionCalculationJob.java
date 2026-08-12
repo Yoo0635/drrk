@@ -38,7 +38,7 @@ public class CongestionCalculationJob {
 	}
 
 	@Scheduled(
-			fixedDelayString = "${congestion.calculation.fixed-delay:PT10S}",
+			fixedRateString = "${congestion.calculation.fixed-rate:PT10S}",
 			initialDelayString = "${congestion.calculation.initial-delay:PT10S}"
 	)
 	public void calculateAndPublish() {
