@@ -1,6 +1,9 @@
 spring:
   application:
     name: main
+  sql:
+    init:
+      mode: always
   mail:
     host: ${SMTP_HOST}
     port: ${SMTP_PORT}

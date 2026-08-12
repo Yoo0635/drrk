@@ -66,6 +66,18 @@ class InferenceWindowMessageParserTest {
 	}
 
 	@Test
+	void rejectsMessageIdsThatAreNotUuidVersionFour() {
+		String versionOneUuid = VALID_MESSAGE.replace(
+				"8c530c6c-f819-4ad6-b687-760dc698c617",
+				"6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+		);
+
+		assertThatThrownBy(() -> parser.parse(versionOneUuid))
+				.isInstanceOf(InvalidInferenceMessageException.class)
+				.hasMessageContaining("UUID v4");
+	}
+
+	@Test
 	void rejectsOutOfRangeEventValues() {
 		String invalidDuration = VALID_MESSAGE.replace("\"dur\": 3.4", "\"dur\": 6.1");
 

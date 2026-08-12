@@ -75,7 +75,10 @@ public class InferenceWindowMessageParser {
 	}
 
 	private static void validateMessage(InferenceWindowMessage message) {
-		UUID.fromString(message.messageId());
+		UUID messageId = UUID.fromString(message.messageId());
+		if (messageId.version() != 4) {
+			throw invalid("message_id must be UUID v4");
+		}
 		if (message.spaceId().isBlank()) {
 			throw invalid("space_id must not be blank");
 		}
