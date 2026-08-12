@@ -17,7 +17,7 @@ public class PassengerForecastClient {
 			PassengerForecastMapper mapper,
 			Clock clock
 	) {
-		this.restClient = builder.baseUrl(properties.passengerForecast().url()).build();
+		this.restClient = builder.clone().baseUrl(properties.passengerForecast().url()).build();
 		this.properties = properties;
 		this.mapper = mapper;
 		this.clock = clock;

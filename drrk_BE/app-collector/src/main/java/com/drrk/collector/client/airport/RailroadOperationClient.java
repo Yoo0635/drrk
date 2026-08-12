@@ -25,7 +25,7 @@ public class RailroadOperationClient {
 			RailroadOperationMapper mapper,
 			Clock clock
 	) {
-		this.restClient = builder.baseUrl(properties.railroad().url()).build();
+		this.restClient = builder.clone().baseUrl(properties.railroad().url()).build();
 		this.properties = properties;
 		this.mapper = mapper;
 		this.clock = clock;

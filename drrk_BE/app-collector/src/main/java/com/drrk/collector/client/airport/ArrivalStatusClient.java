@@ -17,7 +17,7 @@ public class ArrivalStatusClient {
 			ArrivalStatusMapper mapper,
 			Clock clock
 	) {
-		this.restClient = builder.baseUrl(properties.arrivalStatus().url()).build();
+		this.restClient = builder.clone().baseUrl(properties.arrivalStatus().url()).build();
 		this.properties = properties;
 		this.mapper = mapper;
 		this.clock = clock;
