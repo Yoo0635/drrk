@@ -4,6 +4,7 @@ import com.drrk.main.auth.EmailVerificationStore;
 import com.drrk.main.auth.LoginAttemptStore;
 import com.drrk.main.auth.RefreshSessionStore;
 import com.drrk.main.auth.UserAccountRepository;
+import com.drrk.main.consumer.inference.InferenceMessageReceiptStore;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -17,8 +18,9 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 		"spring.mail.port=587",
 		"spring.mail.username=test@example.com",
 		"spring.mail.password=test-password",
-		"auth.jwt-secret=MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTI=",
-		"congestion.consumer.auto-startup=false"
+		"inference.consumer.auto-startup=false",
+		"congestion.consumer.auto-startup=false",
+		"auth.jwt-secret=MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTI="
 })
 class MainApplicationTests {
 
@@ -33,6 +35,9 @@ class MainApplicationTests {
 
 	@MockitoBean
 	LoginAttemptStore loginAttemptStore;
+
+	@MockitoBean
+	InferenceMessageReceiptStore inferenceMessageReceiptStore;
 
 	@Test
 	void contextLoads() {

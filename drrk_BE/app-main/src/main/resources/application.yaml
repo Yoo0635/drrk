@@ -5,6 +5,9 @@ spring:
     listener:
       simple:
         default-requeue-rejected: false
+  sql:
+    init:
+      mode: always
   mail:
     host: ${SMTP_HOST}
     port: ${SMTP_PORT}
