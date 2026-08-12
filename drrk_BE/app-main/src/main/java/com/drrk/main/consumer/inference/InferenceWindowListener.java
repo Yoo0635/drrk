@@ -67,12 +67,12 @@ public class InferenceWindowListener {
 			long deliveryTag,
 			Channel channel
 	) throws IOException {
-		for (int attempt = 1; attempt <= MAX_PROCESSING_ATTEMPTS; attempt++) {
+		InferenceIngestionResult result = null;
+		int attempt;
+		for (attempt = 1; attempt <= MAX_PROCESSING_ATTEMPTS; attempt++) {
 			try {
-				InferenceIngestionResult result = ingestionService.ingest(message, payload);
-				channel.basicAck(deliveryTag, false);
-				logSuccess(message, result, attempt);
-				return;
+				result = ingestionService.ingest(message, payload);
+				break;
 			} catch (RuntimeException exception) {
 				if (attempt == MAX_PROCESSING_ATTEMPTS) {
 					log.error(
@@ -100,8 +100,16 @@ public class InferenceWindowListener {
 						MAX_PROCESSING_ATTEMPTS,
 						exception.getMessage()
 				);
+				try {
+					Thread.sleep(100L * attempt);
+				} catch (InterruptedException interruptedException) {
+					Thread.currentThread().interrupt();
+					throw new RuntimeException("interrupted during retry backoff", interruptedException);
+				}
 			}
 		}
+		channel.basicAck(deliveryTag, false);
+		logSuccess(message, result, attempt);
 	}
 
 	private static void validateMessageId(String amqpMessageId, String payloadMessageId) {
