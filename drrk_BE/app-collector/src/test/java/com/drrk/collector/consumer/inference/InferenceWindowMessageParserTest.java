@@ -39,6 +39,15 @@ class InferenceWindowMessageParserTest {
 		assertThrows(InvalidInferenceMessageException.class, () -> parser.parse(invalid));
 	}
 
+	@Test
+	void rejectsNegativeEventCountEvenWhenAggregateCountMatches() {
+		String invalid = validJson()
+				.replace("\"count\": 2", "\"count\": -1")
+				.replace("\"n_carriers\": 3", "\"n_carriers\": 0");
+
+		assertThrows(InvalidInferenceMessageException.class, () -> parser.parse(invalid));
+	}
+
 	private String validJson() {
 		return """
 				{

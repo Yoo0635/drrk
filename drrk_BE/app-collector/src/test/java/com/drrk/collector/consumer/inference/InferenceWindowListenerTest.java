@@ -43,6 +43,18 @@ class InferenceWindowListenerTest {
 		verify(channel, never()).basicAck(8L, false);
 	}
 
+	@Test
+	void rejectsJsonNullAsContractError() throws IOException {
+		LatestCongestionInputStore store = new LatestCongestionInputStore();
+		InferenceWindowListener listener = listener(store);
+		Channel channel = mock(Channel.class);
+
+		listener.consume(amqpMessage(MESSAGE_ID, "null", 9L), channel);
+
+		verify(channel).basicReject(9L, false);
+		verify(channel, never()).basicAck(9L, false);
+	}
+
 	private InferenceWindowListener listener(LatestCongestionInputStore store) {
 		return new InferenceWindowListener(new InferenceWindowMessageParser(new ObjectMapper()), store);
 	}

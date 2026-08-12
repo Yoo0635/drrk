@@ -22,9 +22,13 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 
+@ExtendWith(OutputCaptureExtension.class)
 class CongestionCalculationJobTest {
 
 	private static final Instant NOW = Instant.parse("2026-08-13T03:00:00Z");
@@ -71,6 +75,29 @@ class CongestionCalculationJobTest {
 
 		verify(calculator, never()).calculate(Mockito.any());
 		verify(publisher, never()).publish(Mockito.any());
+	}
+
+	@Test
+	void logsCalculationFailureWithoutPublishing(CapturedOutput output) {
+		storeFreshInputs();
+		when(calculator.calculate(Mockito.any())).thenThrow(new IllegalStateException("formula failure"));
+
+		job.calculateAndPublish();
+
+		verify(publisher, never()).publish(Mockito.any());
+		org.assertj.core.api.Assertions.assertThat(output).contains("[CALCULATION FAILED]");
+	}
+
+	@Test
+	void logsPublishFailureWithoutEscapingSchedulerTick(CapturedOutput output) {
+		storeFreshInputs();
+		CongestionCalculatedMessage calculated = Mockito.mock(CongestionCalculatedMessage.class);
+		when(calculator.calculate(Mockito.any())).thenReturn(calculated);
+		Mockito.doThrow(new IllegalStateException("broker failure")).when(publisher).publish(calculated);
+
+		job.calculateAndPublish();
+
+		org.assertj.core.api.Assertions.assertThat(output).contains("[PUBLISH FAILED]");
 	}
 
 	private void storeFreshInputs() {

@@ -21,6 +21,9 @@ public class CongestionCalculatedMessageParser {
 		} catch (JacksonException | IllegalArgumentException | NullPointerException exception) {
 			throw new InvalidCongestionMessageException("Invalid congestion JSON", exception);
 		}
+		if (message == null) {
+			throw new InvalidCongestionMessageException("Congestion message must not be null");
+		}
 		validate(message);
 		return message;
 	}

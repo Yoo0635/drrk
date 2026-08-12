@@ -21,6 +21,9 @@ public class InferenceWindowMessageParser {
 		} catch (JacksonException | IllegalArgumentException exception) {
 			throw new InvalidInferenceMessageException("Invalid model JSON", exception);
 		}
+		if (message == null) {
+			throw new InvalidInferenceMessageException("Model message must not be null");
+		}
 		validate(message);
 		return new ModelMeasurementSnapshot(
 				message.messageId(),
@@ -52,12 +55,31 @@ public class InferenceWindowMessageParser {
 		if (message.eventCount() != message.events().size()) {
 			throw new InvalidInferenceMessageException("n_events must match events size");
 		}
+		message.events().forEach(this::validateEvent);
 		int derivedCarrierCount = message.events().stream().mapToInt(InferenceEvent::count).sum();
 		if (message.carrierCount() != derivedCarrierCount) {
 			throw new InvalidInferenceMessageException("n_carriers must match event counts");
 		}
 		if (!Double.isFinite(message.intensity()) || message.intensity() < 0 || message.intensity() > 1) {
 			throw new InvalidInferenceMessageException("intensity must be between 0 and 1");
+		}
+	}
+
+	private void validateEvent(InferenceEvent event) {
+		if (!Double.isFinite(event.t()) || event.t() <= 0) {
+			throw new InvalidInferenceMessageException("event.t must be a positive finite epoch second");
+		}
+		if (!Double.isFinite(event.dur()) || event.dur() <= 0) {
+			throw new InvalidInferenceMessageException("event.dur must be positive and finite");
+		}
+		if (event.count() < 0) {
+			throw new InvalidInferenceMessageException("event.count must be non-negative");
+		}
+		if (!Double.isFinite(event.conf()) || event.conf() < 0 || event.conf() > 1) {
+			throw new InvalidInferenceMessageException("event.conf must be between 0 and 1");
+		}
+		if (!Double.isFinite(event.snr())) {
+			throw new InvalidInferenceMessageException("event.snr must be finite");
 		}
 	}
 

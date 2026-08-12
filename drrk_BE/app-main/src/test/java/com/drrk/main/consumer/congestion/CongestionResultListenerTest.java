@@ -48,6 +48,15 @@ class CongestionResultListenerTest {
 	}
 
 	@Test
+	void rejectsJsonNullAsContractError() throws Exception {
+		listener.consume(message("null", MESSAGE_ID), channel);
+
+		verify(handler, never()).handle(any());
+		verify(channel).basicReject(DELIVERY_TAG, false);
+		verify(channel, never()).basicAck(DELIVERY_TAG, false);
+	}
+
+	@Test
 	void retriesTransientHandlerFailureUpToThreeTimesThenAcknowledges() throws Exception {
 		doThrow(new IllegalStateException("temporary"))
 				.doThrow(new IllegalStateException("temporary"))
