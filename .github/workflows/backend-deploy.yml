@@ -95,15 +95,34 @@ jobs:
             --cli-input-json file://ssm-main.json \
             --query "Command.CommandId" \
             --output text)"
-          if ! aws ssm wait command-executed --command-id "$command_id" --instance-id "${{ vars.MAIN_INSTANCE_ID }}"; then
-            aws ssm get-command-invocation --command-id "$command_id" --instance-id "${{ vars.MAIN_INSTANCE_ID }}" \
-              --query "{Status:Status,StandardOutputContent:StandardOutputContent,StandardErrorContent:StandardErrorContent}" \
-              --output json || true
-            exit 1
-          fi
+          for attempt in $(seq 1 120); do
+            if ! status="$(aws ssm get-command-invocation --command-id "$command_id" --instance-id "${{ vars.MAIN_INSTANCE_ID }}" --query Status --output text 2>/dev/null)"; then
+              sleep 5
+              continue
+            fi
+            case "$status" in
+              Success)
+                aws ssm get-command-invocation --command-id "$command_id" --instance-id "${{ vars.MAIN_INSTANCE_ID }}" \
+                  --query "{Status:Status,StandardOutputContent:StandardOutputContent,StandardErrorContent:StandardErrorContent}" \
+                  --output json
+                exit 0
+                ;;
+              Pending|InProgress|Delayed)
+                sleep 5
+                ;;
+              *)
+                aws ssm get-command-invocation --command-id "$command_id" --instance-id "${{ vars.MAIN_INSTANCE_ID }}" \
+                  --query "{Status:Status,StandardOutputContent:StandardOutputContent,StandardErrorContent:StandardErrorContent}" \
+                  --output json || true
+                exit 1
+                ;;
+            esac
+          done
+          echo "SSM deploy command timed out after 10 minutes" >&2
           aws ssm get-command-invocation --command-id "$command_id" --instance-id "${{ vars.MAIN_INSTANCE_ID }}" \
             --query "{Status:Status,StandardOutputContent:StandardOutputContent,StandardErrorContent:StandardErrorContent}" \
-            --output json
+            --output json || true
+          exit 1
 
   deploy-collector:
     name: Deploy Collector EC2
@@ -152,12 +171,31 @@ jobs:
             --cli-input-json file://ssm-collector.json \
             --query "Command.CommandId" \
             --output text)"
-          if ! aws ssm wait command-executed --command-id "$command_id" --instance-id "${{ vars.COLLECTOR_INSTANCE_ID }}"; then
-            aws ssm get-command-invocation --command-id "$command_id" --instance-id "${{ vars.COLLECTOR_INSTANCE_ID }}" \
-              --query "{Status:Status,StandardOutputContent:StandardOutputContent,StandardErrorContent:StandardErrorContent}" \
-              --output json || true
-            exit 1
-          fi
+          for attempt in $(seq 1 120); do
+            if ! status="$(aws ssm get-command-invocation --command-id "$command_id" --instance-id "${{ vars.COLLECTOR_INSTANCE_ID }}" --query Status --output text 2>/dev/null)"; then
+              sleep 5
+              continue
+            fi
+            case "$status" in
+              Success)
+                aws ssm get-command-invocation --command-id "$command_id" --instance-id "${{ vars.COLLECTOR_INSTANCE_ID }}" \
+                  --query "{Status:Status,StandardOutputContent:StandardOutputContent,StandardErrorContent:StandardErrorContent}" \
+                  --output json
+                exit 0
+                ;;
+              Pending|InProgress|Delayed)
+                sleep 5
+                ;;
+              *)
+                aws ssm get-command-invocation --command-id "$command_id" --instance-id "${{ vars.COLLECTOR_INSTANCE_ID }}" \
+                  --query "{Status:Status,StandardOutputContent:StandardOutputContent,StandardErrorContent:StandardErrorContent}" \
+                  --output json || true
+                exit 1
+                ;;
+            esac
+          done
+          echo "SSM deploy command timed out after 10 minutes" >&2
           aws ssm get-command-invocation --command-id "$command_id" --instance-id "${{ vars.COLLECTOR_INSTANCE_ID }}" \
             --query "{Status:Status,StandardOutputContent:StandardOutputContent,StandardErrorContent:StandardErrorContent}" \
-            --output json
+            --output json || true
+          exit 1
