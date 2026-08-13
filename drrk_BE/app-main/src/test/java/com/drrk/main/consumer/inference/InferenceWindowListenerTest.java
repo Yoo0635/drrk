@@ -52,12 +52,14 @@ class InferenceWindowListenerTest {
 	@Mock
 	private Channel channel;
 
+	private LatestInferenceSnapshotStore latestSnapshotStore;
 	private InferenceWindowListener listener;
 
 	@BeforeEach
 	void setUp() {
 		InferenceWindowMessageParser parser = new InferenceWindowMessageParser(new JsonMapper());
-		listener = new InferenceWindowListener(parser, ingestionService);
+		latestSnapshotStore = new LatestInferenceSnapshotStore();
+		listener = new InferenceWindowListener(parser, ingestionService, latestSnapshotStore);
 	}
 
 	@Test
@@ -69,6 +71,9 @@ class InferenceWindowListenerTest {
 
 		verify(channel).basicAck(DELIVERY_TAG, false);
 		verify(channel, never()).basicReject(DELIVERY_TAG, false);
+		assertThat(latestSnapshotStore.findAll())
+				.extracting(LatestInferenceSnapshot::spaceId, LatestInferenceSnapshot::carrierCount)
+				.containsExactly(org.assertj.core.groups.Tuple.tuple("desk01", 3));
 		assertThat(output).contains("[CONSUME SUCCESS] messageId=" + MESSAGE_ID);
 	}
 
@@ -81,6 +86,7 @@ class InferenceWindowListenerTest {
 
 		verify(channel).basicAck(DELIVERY_TAG, false);
 		verify(channel, never()).basicReject(DELIVERY_TAG, false);
+		assertThat(latestSnapshotStore.findAll()).isEmpty();
 	}
 
 	@Test
@@ -92,6 +98,7 @@ class InferenceWindowListenerTest {
 		verify(ingestionService, never()).ingest(any(), any());
 		verify(channel).basicReject(DELIVERY_TAG, false);
 		verify(channel, never()).basicAck(DELIVERY_TAG, false);
+		assertThat(latestSnapshotStore.findAll()).isEmpty();
 		assertThat(output).contains("[CONSUME REJECTED] messageId=" + MESSAGE_ID);
 		assertThat(output).contains(
 				"[CONSUME DLQ] messageId=" + MESSAGE_ID + " reason=PERMANENT_CONTRACT_ERROR"
@@ -107,6 +114,7 @@ class InferenceWindowListenerTest {
 
 		verify(ingestionService, never()).ingest(any(), any());
 		verify(channel).basicReject(DELIVERY_TAG, false);
+		assertThat(latestSnapshotStore.findAll()).isEmpty();
 	}
 
 	@Test
@@ -122,6 +130,9 @@ class InferenceWindowListenerTest {
 				.ingest(any(InferenceWindowMessage.class), eq(VALID_PAYLOAD));
 		verify(channel).basicAck(DELIVERY_TAG, false);
 		verify(channel, never()).basicReject(DELIVERY_TAG, false);
+		assertThat(latestSnapshotStore.findAll())
+				.extracting(LatestInferenceSnapshot::spaceId, LatestInferenceSnapshot::carrierCount)
+				.containsExactly(org.assertj.core.groups.Tuple.tuple("desk01", 3));
 	}
 
 	@Test
@@ -135,6 +146,7 @@ class InferenceWindowListenerTest {
 				.ingest(any(InferenceWindowMessage.class), eq(VALID_PAYLOAD));
 		verify(channel).basicReject(DELIVERY_TAG, false);
 		verify(channel, never()).basicAck(DELIVERY_TAG, false);
+		assertThat(latestSnapshotStore.findAll()).isEmpty();
 		assertThat(output)
 				.contains("[CONSUME FAILED] messageId=" + MESSAGE_ID + " spaceId=desk01 ts=1.755E9 attempts=3")
 				.contains(

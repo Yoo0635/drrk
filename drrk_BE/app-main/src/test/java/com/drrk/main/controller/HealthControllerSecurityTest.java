@@ -93,4 +93,10 @@ class HealthControllerSecurityTest {
 				.andExpect(jsonPath("$", not(hasKey("password"))))
 				.andExpect(jsonPath("$", not(hasKey("secret"))));
 	}
+
+	@Test
+	void permitsCarrierCountStreamWithoutAuthentication() throws Exception {
+		mockMvc.perform(get("/api/v1/inference/carriers/stream"))
+				.andExpect(status().isOk());
+	}
 }
