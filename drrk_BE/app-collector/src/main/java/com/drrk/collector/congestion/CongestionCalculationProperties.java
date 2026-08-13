@@ -7,7 +7,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class CongestionCalculationProperties {
 
 	private Duration apiMaxAge = Duration.ofMinutes(10);
-	private Duration modelMaxAge = Duration.ofSeconds(10);
+	private Duration modelMaxAge = Duration.ofSeconds(5);
 
 	public Duration getApiMaxAge() {
 		return apiMaxAge;

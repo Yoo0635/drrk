@@ -31,10 +31,10 @@ inference:
 congestion:
   calculation:
     enabled: ${CONGESTION_CALCULATION_ENABLED:false}
-    fixed-rate: ${CONGESTION_CALCULATION_FIXED_RATE:PT10S}
-    initial-delay: ${CONGESTION_CALCULATION_INITIAL_DELAY:PT10S}
+    fixed-rate: ${CONGESTION_CALCULATION_FIXED_RATE:PT5S}
+    initial-delay: ${CONGESTION_CALCULATION_INITIAL_DELAY:PT5S}
     api-max-age: ${CONGESTION_API_MAX_AGE:PT10M}
-    model-max-age: ${CONGESTION_MODEL_MAX_AGE:PT10S}
+    model-max-age: ${CONGESTION_MODEL_MAX_AGE:PT5S}
   moving-walkway:
     enabled: ${CONGESTION_MOVING_WALKWAY_ENABLED:false}
     sensor-space-id: ${CONGESTION_SENSOR_SPACE_ID:}

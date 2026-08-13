@@ -39,8 +39,8 @@ public class CongestionCalculationJob {
 	}
 
 	@Scheduled(
-			fixedRateString = "${congestion.calculation.fixed-rate:PT10S}",
-			initialDelayString = "${congestion.calculation.initial-delay:PT10S}"
+			fixedRateString = "${congestion.calculation.fixed-rate:PT5S}",
+			initialDelayString = "${congestion.calculation.initial-delay:PT5S}"
 	)
 	public void calculateAndPublish() {
 		store.snapshot().freshInputs(clock.instant(), apiMaxAge, modelMaxAge).ifPresentOrElse(
