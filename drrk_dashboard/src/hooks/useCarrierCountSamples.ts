@@ -19,7 +19,7 @@ interface UseCarrierCountSamplesResult {
 }
 
 export function useCarrierCountSamples({
-  baseUrl = import.meta.env.VITE_API_BASE_URL ?? "",
+  baseUrl = import.meta.env.VITE_API_BASE_URL ?? window.location.origin,
   EventSourceCtor,
   now,
 }: UseCarrierCountSamplesOptions = {}): UseCarrierCountSamplesResult {
