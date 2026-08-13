@@ -17,6 +17,7 @@ import tools.jackson.databind.ObjectMapper;
 class InferenceWindowListenerTest {
 
 	private static final String MESSAGE_ID = "8c530c6c-f819-4ad6-b687-760dc698c617";
+	private static final String MODEL_MESSAGE_ID = "desk01:1786634462.6";
 
 	@Test
 	void storesLatestModelMeasurementBeforeManualAck() throws IOException {
@@ -42,6 +43,19 @@ class InferenceWindowListenerTest {
 		assertEquals("0f37c542-1fc9-4d50-9f1c-53ebda7edc4c", store.snapshot().modelMeasurement().messageId());
 		verify(channel).basicAck(10L, false);
 		verify(channel, never()).basicReject(10L, false);
+	}
+
+	@Test
+	void usesModelStyleAmqpMessageIdWhenJsonMessageIdIsMissing() throws IOException {
+		LatestCongestionInputStore store = new LatestCongestionInputStore();
+		InferenceWindowListener listener = listener(store);
+		Channel channel = mock(Channel.class);
+
+		listener.consume(amqpMessage(MODEL_MESSAGE_ID, jsonWithoutMessageId(), 11L), channel);
+
+		assertEquals(MODEL_MESSAGE_ID, store.snapshot().modelMeasurement().messageId());
+		verify(channel).basicAck(11L, false);
+		verify(channel, never()).basicReject(11L, false);
 	}
 
 	@Test

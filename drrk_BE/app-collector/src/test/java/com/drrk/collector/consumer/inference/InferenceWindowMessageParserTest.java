@@ -11,6 +11,7 @@ import tools.jackson.databind.ObjectMapper;
 class InferenceWindowMessageParserTest {
 
 	private final InferenceWindowMessageParser parser = new InferenceWindowMessageParser(new ObjectMapper());
+	private static final String MODEL_MESSAGE_ID = "desk01:1786634462.6";
 
 	@Test
 	void mapsValidModelWindowToLatestMeasurementSnapshot() {
@@ -36,6 +37,16 @@ class InferenceWindowMessageParserTest {
 	}
 
 	@Test
+	void acceptsCalculationContractWhenFallbackMessageIdMatchesModelFormat() {
+		ModelMeasurementSnapshot snapshot = parser.parse(minimalCalculationJson(), MODEL_MESSAGE_ID);
+
+		assertEquals(MODEL_MESSAGE_ID, snapshot.messageId());
+		assertEquals("desk01", snapshot.spaceId());
+		assertEquals(10, snapshot.windowSec());
+		assertEquals(3, snapshot.carrierCount());
+	}
+
+	@Test
 	void prefersValidJsonMessageIdOverFallbackMessageId() {
 		ModelMeasurementSnapshot snapshot = parser.parse(validJson(),
 				"0f37c542-1fc9-4d50-9f1c-53ebda7edc4c");
@@ -44,9 +55,9 @@ class InferenceWindowMessageParserTest {
 	}
 
 	@Test
-	void rejectsWhenNeitherJsonMessageIdNorFallbackMessageIdIsValidUuidV4() {
+	void rejectsWhenNeitherJsonMessageIdNorFallbackMessageIdIsPresent() {
 		assertThrows(InvalidInferenceMessageException.class,
-				() -> parser.parse(minimalCalculationJson(), "not-a-uuid"));
+				() -> parser.parse(minimalCalculationJson(), ""));
 	}
 
 	@Test
@@ -57,16 +68,6 @@ class InferenceWindowMessageParserTest {
 	@Test
 	void rejectsWindowWhenDerivedCarrierCountDoesNotMatchEvents() {
 		String invalid = validJson().replace("\"n_carriers\": 3", "\"n_carriers\": 4");
-
-		assertThrows(InvalidInferenceMessageException.class, () -> parser.parse(invalid));
-	}
-
-	@Test
-	void rejectsMessageIdThatIsNotUuidVersionFour() {
-		String invalid = validJson().replace(
-				"8c530c6c-f819-4ad6-b687-760dc698c617",
-				"00000000-0000-1000-8000-000000000000"
-		);
 
 		assertThrows(InvalidInferenceMessageException.class, () -> parser.parse(invalid));
 	}

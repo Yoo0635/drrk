@@ -45,8 +45,7 @@ public class InferenceWindowListener {
 
 		InferenceWindowMessage message;
 		try {
-			message = parser.parse(payload);
-			validateMessageId(amqpMessageId, message.messageId());
+			message = parser.parse(payload, amqpMessageId);
 		} catch (InvalidInferenceMessageException exception) {
 			log.warn(
 					"[CONSUME REJECTED] messageId={} deliveryTag={} reason={}",
@@ -122,12 +121,6 @@ public class InferenceWindowListener {
 			));
 		}
 		logSuccess(message, result, attempt);
-	}
-
-	private static void validateMessageId(String amqpMessageId, String payloadMessageId) {
-		if (amqpMessageId == null || !amqpMessageId.equals(payloadMessageId)) {
-			throw new InvalidInferenceMessageException("AMQP messageId must match JSON message_id");
-		}
 	}
 
 	private static void logSuccess(

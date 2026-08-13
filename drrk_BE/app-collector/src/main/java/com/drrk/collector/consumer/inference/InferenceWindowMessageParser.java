@@ -4,7 +4,6 @@ import com.drrk.collector.congestion.ModelMeasurementSnapshot;
 import java.time.DateTimeException;
 import java.time.Instant;
 import java.util.List;
-import java.util.UUID;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 
@@ -79,22 +78,12 @@ public class InferenceWindowMessageParser {
 
 	private String resolveMessageId(String jsonMessageId, String fallbackMessageId) {
 		if (jsonMessageId != null && !jsonMessageId.isBlank()) {
-			return validUuidV4(jsonMessageId, "message_id must be UUID v4");
+			return jsonMessageId;
 		}
-		return validUuidV4(fallbackMessageId, "fallback message_id must be UUID v4");
-	}
-
-	private String validUuidV4(String value, String message) {
-		UUID messageId;
-		try {
-			messageId = UUID.fromString(value);
-		} catch (RuntimeException exception) {
-			throw new InvalidInferenceMessageException(message, exception);
+		if (fallbackMessageId == null || fallbackMessageId.isBlank()) {
+			throw new InvalidInferenceMessageException("message_id must not be blank");
 		}
-		if (messageId.version() != 4) {
-			throw new InvalidInferenceMessageException(message);
-		}
-		return value;
+		return fallbackMessageId;
 	}
 
 	private void validateEvent(InferenceEvent event, double ts, int windowSec) {

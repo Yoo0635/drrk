@@ -24,6 +24,7 @@ class InferenceWindowMessageParserTest {
 			  "count_est": null
 			}
 			""";
+	private static final String MODEL_MESSAGE_ID = "desk01:1786634462.6";
 
 	private final InferenceWindowMessageParser parser = new InferenceWindowMessageParser(new JsonMapper());
 
@@ -43,6 +44,19 @@ class InferenceWindowMessageParserTest {
 		assertThat(message.nCarriers()).isEqualTo(3);
 		assertThat(message.intensity()).isEqualTo(0.42);
 		assertThat(message.countEst()).isNull();
+	}
+
+	@Test
+	void usesNonUuidAmqpMessageIdWhenJsonMessageIdIsMissing() {
+		String withoutMessageId = VALID_MESSAGE.replace(
+				"  \"message_id\": \"8c530c6c-f819-4ad6-b687-760dc698c617\",%n".formatted(),
+				""
+		);
+
+		InferenceWindowMessage message = parser.parse(withoutMessageId, MODEL_MESSAGE_ID);
+
+		assertThat(message.messageId()).isEqualTo(MODEL_MESSAGE_ID);
+		assertThat(message.spaceId()).isEqualTo("desk01");
 	}
 
 	@Test
@@ -66,15 +80,15 @@ class InferenceWindowMessageParserTest {
 	}
 
 	@Test
-	void rejectsMessageIdsThatAreNotUuidVersionFour() {
-		String versionOneUuid = VALID_MESSAGE.replace(
-				"8c530c6c-f819-4ad6-b687-760dc698c617",
-				"6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+	void rejectsWhenNeitherJsonNorAmqpMessageIdIsPresent() {
+		String withoutMessageId = VALID_MESSAGE.replace(
+				"  \"message_id\": \"8c530c6c-f819-4ad6-b687-760dc698c617\",%n".formatted(),
+				""
 		);
 
-		assertThatThrownBy(() -> parser.parse(versionOneUuid))
+		assertThatThrownBy(() -> parser.parse(withoutMessageId))
 				.isInstanceOf(InvalidInferenceMessageException.class)
-				.hasMessageContaining("UUID v4");
+				.hasMessageContaining("message_id");
 	}
 
 	@Test
