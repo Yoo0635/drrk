@@ -8,11 +8,8 @@ services:
       NGINX_ENVSUBST_FILTER: "^ROOT_DOMAIN$"
     ports:
       - "80:80"
-      - "443:443"
     volumes:
       - ./nginx/templates:/etc/nginx/templates:ro
-      - /etc/letsencrypt:/etc/letsencrypt:ro
-      - /var/www/certbot:/var/www/certbot:ro
     depends_on:
       app-main:
         condition: service_healthy
