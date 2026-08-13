@@ -1,11 +1,15 @@
 package com.drrk.main.consumer.congestion;
 
+import com.drrk.messaging.congestion.AirportRoute;
 import com.drrk.messaging.congestion.CongestionCalculatedMessage;
 import com.drrk.messaging.congestion.CongestionCalculationStatus;
 import com.drrk.messaging.congestion.MovingWalkwayStatus;
 import com.drrk.messaging.congestion.RouteCongestionResult;
+import com.drrk.messaging.congestion.RouteStatus;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
@@ -37,7 +41,7 @@ public class CongestionCalculatedMessageParser {
 
 	private void validate(CongestionCalculatedMessage message) {
 		validateUuidV4(message.messageId(), "messageId");
-		if (!"2.0".equals(message.schemaVersion())) {
+		if (!"3.0".equals(message.schemaVersion())) {
 			throw new InvalidCongestionMessageException("Unsupported schemaVersion");
 		}
 		if (message.status() == CongestionCalculationStatus.FORMULA_PENDING) {
@@ -57,10 +61,13 @@ public class CongestionCalculatedMessageParser {
 	}
 
 	private void validateCalculated(CongestionCalculatedMessage message) {
+		Set<AirportRoute> routes = new HashSet<>(message.routeResults().stream()
+				.map(RouteCongestionResult::route)
+				.toList());
 		if (message.calculationVersion() == null || message.calculationVersion().isBlank()
-				|| message.routeResults().isEmpty() || message.routeResults().size() > 2
-				|| new HashSet<>(message.routeResults().stream().map(RouteCongestionResult::route).toList()).size()
-				!= message.routeResults().size()) {
+				|| message.routeResults().size() != 3
+				|| routes.size() != 3
+				|| !routes.containsAll(List.of(AirportRoute.A, AirportRoute.B, AirportRoute.C))) {
 			throw new InvalidCongestionMessageException("Invalid CALCULATED routes");
 		}
 		RouteCongestionResult recommended = message.routeResults().stream()
@@ -83,6 +90,12 @@ public class CongestionCalculatedMessageParser {
 			);
 			if (result.congestionStatus() != expected) {
 				throw new InvalidCongestionMessageException("Route congestion status does not match v/c");
+			}
+			RouteStatus expectedRouteStatus = message.sensorDetected() && result.route() == AirportRoute.B
+					? RouteStatus.CONGESTED
+					: RouteStatus.CLEAR;
+			if (result.status() != expectedRouteStatus) {
+				throw new InvalidCongestionMessageException("Route sensor status does not match sensorDetected");
 			}
 		}
 		RouteCongestionResult fastest = message.routeResults().stream()

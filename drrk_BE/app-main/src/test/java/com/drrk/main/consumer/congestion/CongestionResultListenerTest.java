@@ -92,10 +92,11 @@ class CongestionResultListenerTest {
 		return """
 				{
 				  "messageId": "8c530c6c-f819-4ad6-b687-760dc698c617",
-				  "schemaVersion": "2.0",
+				  "schemaVersion": "3.0",
 				  "calculatedAt": "2026-08-13T03:00:00Z",
 				  "calculationVersion": "formula-pending-v0",
 				  "status": "FORMULA_PENDING",
+				  "sensorDetected": false,
 				  "score": null,
 				  "level": null,
 				  "inputs": {

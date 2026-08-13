@@ -8,6 +8,7 @@ import java.util.List;
 public record RouteRecommendationResponse(
 		AirportRoute recommendedRoute,
 		Instant calculatedAt,
+		boolean sensorDetected,
 		List<RouteCongestionResult> routes
 ) {
 
