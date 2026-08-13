@@ -25,7 +25,7 @@ class AirportResponseMapperTest {
 				{
 				  "response": {
 				    "header": {"resultCode": "00", "resultMsg": "NORMAL SERVICE.", "ignored": "value"},
-				    "body": {"items": [
+				    "body": {"items": {"item": [
 				      {"terno": "T1", "entrygate": " b ", "flightid": "KE001", "estimatedtime": "202608131200", "scheduletime": "202608131159", "korean": "10", "foreigner": "4"},
 				      {"terno": "t1", "entrygate": " c ", "flightid": "OZ002", "estimatedtime": "", "scheduletime": "202608131205", "korean": "0", "foreigner": "7"},
 				      {"terno": "T1", "entrygate": "A", "flightid": "KE002", "estimatedtime": "202608131205"},
@@ -35,7 +35,7 @@ class AirportResponseMapperTest {
 				      {"terno": "T1", "entrygate": "C", "flightid": "KE006", "estimatedtime": "202608131220", "korean": "-1", "foreigner": "1"},
 				      {"terno": "T1", "entrygate": "C", "flightid": "KE007", "estimatedtime": "not-a-time", "korean": "1", "foreigner": "1"},
 				      {"terno": "T1", "entrygate": "C", "flightid": "", "estimatedtime": "202608131225", "korean": "1", "foreigner": "1"}
-				    ], "totalCount": 9}
+				    ]}, "totalCount": 9}
 				  }
 				}
 				""", ArrivalStatusApiResponse.class);
@@ -54,7 +54,7 @@ class AirportResponseMapperTest {
 				{
 				  "response": {
 				    "header": {"resultCode": "00", "resultMsg": "NORMAL SERVICE."},
-				    "body": {"items": [
+				    "body": {"items": {"item": [
 				      {"terno":"T1","entrygate":"B","flightid":"KE0906","estimatedtime":"202608130906","korean":"6","foreigner":"0"},
 				      {"terno":"T1","entrygate":"C","flightid":"KE0859","estimatedtime":"202608130859","korean":"59","foreigner":"0"},
 				      {"terno":"T1","entrygate":"B","flightid":"KE0902","estimatedtime":"202608130902","korean":"2","foreigner":"0"},
@@ -64,7 +64,7 @@ class AirportResponseMapperTest {
 				      {"terno":"T1","entrygate":"B","flightid":"KE0904","estimatedtime":"202608130904","korean":"4","foreigner":"0"},
 				      {"terno":"T1","entrygate":"C","flightid":"KE0903","estimatedtime":"202608130903","korean":"3","foreigner":"0"},
 				      {"terno":"T1","entrygate":"B","flightid":"KE0907","estimatedtime":"202608130907","korean":"7","foreigner":"0"}
-				    ]}
+				    ]}}
 				  }
 				}
 				""", ArrivalStatusApiResponse.class);
@@ -86,11 +86,11 @@ class AirportResponseMapperTest {
 				{
 				  "response": {
 				    "header": {"resultCode": "00", "resultMsg": "NORMAL SERVICE."},
-				    "body": {"items": [
+				    "body": {"items": {"item": [
 				      {"adate": "20260813", "atime": "00_01", "t1eg1": "722", "t1egsum1": "999.0"},
 				      {"adate": "20260813", "atime": "01_02", "t1eg1": "722.0"},
 				      {"adate": "20260813", "atime": "02_03", "t1eg1": "-1"}
-				    ]}
+				    ]}}
 				  }
 				}
 				""", PassengerForecastApiResponse.class);
@@ -106,11 +106,11 @@ class AirportResponseMapperTest {
 				{
 				  "response": {
 				    "header": {"resultCode": "00", "resultMsg": "NORMAL SERVICE."},
-				    "body": {"items": [
+				    "body": {"items": {"item": [
 				      {"trnNo": "A2002", "stnCd": " 110 ", "accomArrvDttm": "20260813090900", "planDptrDttm": "20260813091000", "accomDptrDttm": "20260813091100", "trnClsfNm": "AREX"},
 				      {"trnNo": "A2003", "stnCd": "111", "accomArrvDttm": "20260813100800", "planDptrDttm": "20260813100900", "accomDptrDttm": "20260813101000", "trnClsNm": "LOCAL"},
 				      {"trnNo": "A2004", "stnCd": "112", "accomArrvDttm": "", "planDptrDttm": "20260813110900", "accomDptrDttm": "20260813111000", "trnClsfNm": "LOCAL"}
-				    ]}
+				    ]}}
 				  }
 				}
 				""", RailroadOperationApiResponse.class);
@@ -136,9 +136,9 @@ class AirportResponseMapperTest {
 				{
 				  "response": {
 				    "header": {"resultCode": "00", "resultMsg": "NORMAL SERVICE."},
-				    "body": {"items": [
+				    "body": {"items": {"item": [
 				      {"trnNo": "A2135", "stnCd": "077", "planArrvDttm": "20260814154700", "planDptrDttm": "20260814154730", "accomArrvDttm": "", "accomDptrDttm": "", "trnClsfNm": "Comm"}
-				    ]}
+				    ]}}
 				  }
 				}
 				""", RailroadOperationApiResponse.class);
@@ -161,7 +161,7 @@ class AirportResponseMapperTest {
 				{
 				  "response": {
 				    "header": {"resultCode": "00", "resultMsg": "NORMAL SERVICE."},
-				    "body": {"items": [
+				    "body": {"items": {"item": [
 				      {"trnNo":"A0906","stnCd":"110","accomArrvDttm":"20260813090600","planDptrDttm":"20260813090700","accomDptrDttm":"20260813090730","trnClsfNm":"LOCAL"},
 				      {"trnNo":"A0859","stnCd":"110","accomArrvDttm":"20260813085959","planDptrDttm":"20260813090059","accomDptrDttm":"20260813090129","trnClsfNm":"LOCAL"},
 				      {"trnNo":"A0902","stnCd":"110","accomArrvDttm":"20260813090200","planDptrDttm":"20260813090300","accomDptrDttm":"20260813090330","trnClsfNm":"LOCAL"},
@@ -171,7 +171,7 @@ class AirportResponseMapperTest {
 				      {"trnNo":"A0904","stnCd":"110","accomArrvDttm":"20260813090400","planDptrDttm":"20260813090500","accomDptrDttm":"20260813090530","trnClsfNm":"LOCAL"},
 				      {"trnNo":"A0903","stnCd":"110","accomArrvDttm":"20260813090300","planDptrDttm":"20260813090400","accomDptrDttm":"20260813090430","trnClsfNm":"LOCAL"},
 				      {"trnNo":"A0907","stnCd":"110","accomArrvDttm":"20260813090700","planDptrDttm":"20260813090800","accomDptrDttm":"20260813090830","trnClsfNm":"LOCAL"}
-				    ]}
+				    ]}}
 				  }
 				}
 				""", RailroadOperationApiResponse.class);
@@ -189,7 +189,7 @@ class AirportResponseMapperTest {
 				{
 				  "response": {
 				    "header": {"resultCode": "00", "resultMsg": "NORMAL SERVICE."},
-				    "body": {"items": [
+				    "body": {"items": {"item": [
 				      {"trnNo":"A0858","stnCd":"110","accomArrvDttm":"20260813085800","planDptrDttm":"20260813085900","accomDptrDttm":"20260813085930","trnClsfNm":"LOCAL"},
 				      {"trnNo":"A0859","stnCd":"110","accomArrvDttm":"20260813085930","planDptrDttm":"20260813090030","accomDptrDttm":"20260813090100","trnClsfNm":"LOCAL"},
 				      {"trnNo":"A0900","stnCd":"110","accomArrvDttm":"20260813090000","planDptrDttm":"20260813090100","accomDptrDttm":"20260813090130","trnClsfNm":"LOCAL"},
@@ -197,7 +197,7 @@ class AirportResponseMapperTest {
 				      {"trnNo":"A0902","stnCd":"110","accomArrvDttm":"20260813090200","planDptrDttm":"20260813090300","accomDptrDttm":"20260813090330","trnClsfNm":"LOCAL"},
 				      {"trnNo":"A0903","stnCd":"110","accomArrvDttm":"20260813090300","planDptrDttm":"20260813090400","accomDptrDttm":"20260813090430","trnClsfNm":"LOCAL"},
 				      {"trnNo":"A0904","stnCd":"110","accomArrvDttm":"20260813090400","planDptrDttm":"20260813090500","accomDptrDttm":"20260813090530","trnClsfNm":"LOCAL"}
-				    ]}
+				    ]}}
 				  }
 				}
 				""", RailroadOperationApiResponse.class);
@@ -227,10 +227,10 @@ class AirportResponseMapperTest {
 	}
 
 	@Test
-	void mapperRejectsPublicApiFailureResultCode() throws Exception {
-		ArrivalStatusApiResponse response = objectMapper.readValue("""
-				{"response":{"header":{"resultCode":"30","resultMsg":"SERVICE KEY IS NOT REGISTERED ERROR."},"body":{"items":[]}}}
-				""", ArrivalStatusApiResponse.class);
+		void mapperRejectsPublicApiFailureResultCode() throws Exception {
+			ArrivalStatusApiResponse response = objectMapper.readValue("""
+					{"response":{"header":{"resultCode":"30","resultMsg":"SERVICE KEY IS NOT REGISTERED ERROR."},"body":{"items":{"item":[]}}}}
+					""", ArrivalStatusApiResponse.class);
 
 		assertThrows(AirportApiResponseException.class, () -> new ArrivalStatusMapper().map(response, collectedAt));
 	}
@@ -240,12 +240,12 @@ class AirportResponseMapperTest {
 		RailroadOperationApiResponse response = objectMapper.readValue("""
 				{
 				  "response": {
-				    "header": {"resultCode": "00", "resultMsg": "NORMAL SERVICE."},
-				    "body": {"items": [
-				      {"trnNo": "", "stnCd": "110", "accomArrvDttm": "20260813090000", "planDptrDttm": "20260813090100", "accomDptrDttm": "20260813090130", "trnClsfNm": "LOCAL"},
-				      {"trnNo": "   ", "stnCd": "111", "accomArrvDttm": "20260813090100", "planDptrDttm": "20260813090200", "accomDptrDttm": "20260813090230", "trnClsfNm": "LOCAL"},
-				      {"trnNo": "A0900", "stnCd": "110", "accomArrvDttm": "20260813090200", "planDptrDttm": "20260813090300", "accomDptrDttm": "20260813090330", "trnClsfNm": "LOCAL"}
-				    ]}
+					    "header": {"resultCode": "00", "resultMsg": "NORMAL SERVICE."},
+					    "body": {"items": {"item": [
+					      {"trnNo": "", "stnCd": "110", "accomArrvDttm": "20260813090000", "planDptrDttm": "20260813090100", "accomDptrDttm": "20260813090130", "trnClsfNm": "LOCAL"},
+					      {"trnNo": "   ", "stnCd": "111", "accomArrvDttm": "20260813090100", "planDptrDttm": "20260813090200", "accomDptrDttm": "20260813090230", "trnClsfNm": "LOCAL"},
+					      {"trnNo": "A0900", "stnCd": "110", "accomArrvDttm": "20260813090200", "planDptrDttm": "20260813090300", "accomDptrDttm": "20260813090330", "trnClsfNm": "LOCAL"}
+					    ]}}
 				  }
 				}
 				""", RailroadOperationApiResponse.class);
@@ -262,12 +262,12 @@ class AirportResponseMapperTest {
 		RailroadOperationApiResponse response = objectMapper.readValue("""
 				{
 				  "response": {
-				    "header": {"resultCode": "00", "resultMsg": "NORMAL SERVICE."},
-				    "body": {"items": [
-				      {"trnNo": "A0900", "stnCd": "", "accomArrvDttm": "20260813090000", "planDptrDttm": "20260813090100", "accomDptrDttm": "20260813090130", "trnClsfNm": "LOCAL"},
-				      {"trnNo": "A0901", "stnCd": "   ", "accomArrvDttm": "20260813090100", "planDptrDttm": "20260813090200", "accomDptrDttm": "20260813090230", "trnClsfNm": "LOCAL"},
-				      {"trnNo": "A0902", "stnCd": "110", "accomArrvDttm": "20260813090200", "planDptrDttm": "20260813090300", "accomDptrDttm": "20260813090330", "trnClsfNm": "LOCAL"}
-				    ]}
+					    "header": {"resultCode": "00", "resultMsg": "NORMAL SERVICE."},
+					    "body": {"items": {"item": [
+					      {"trnNo": "A0900", "stnCd": "", "accomArrvDttm": "20260813090000", "planDptrDttm": "20260813090100", "accomDptrDttm": "20260813090130", "trnClsfNm": "LOCAL"},
+					      {"trnNo": "A0901", "stnCd": "   ", "accomArrvDttm": "20260813090100", "planDptrDttm": "20260813090200", "accomDptrDttm": "20260813090230", "trnClsfNm": "LOCAL"},
+					      {"trnNo": "A0902", "stnCd": "110", "accomArrvDttm": "20260813090200", "planDptrDttm": "20260813090300", "accomDptrDttm": "20260813090330", "trnClsfNm": "LOCAL"}
+					    ]}}
 				  }
 				}
 				""", RailroadOperationApiResponse.class);

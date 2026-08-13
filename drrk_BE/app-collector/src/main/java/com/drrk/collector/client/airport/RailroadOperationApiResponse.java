@@ -12,7 +12,11 @@ public record RailroadOperationApiResponse(Response response) {
 	}
 
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public record Body(List<Item> items) {
+	public record Body(Items items) {
+	}
+
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record Items(List<Item> item) {
 	}
 
 	@JsonIgnoreProperties(ignoreUnknown = true)

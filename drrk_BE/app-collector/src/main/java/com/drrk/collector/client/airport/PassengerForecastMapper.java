@@ -12,8 +12,9 @@ public class PassengerForecastMapper {
 	public PassengerForecastSnapshot map(PassengerForecastApiResponse apiResponse, Instant collectedAt) {
 		apiResponse.response().header().requireSuccess();
 		List<PassengerForecastApiResponse.Item> items = apiResponse.response().body() == null
+				|| apiResponse.response().body().items() == null
 				? List.of()
-				: apiResponse.response().body().items();
+				: apiResponse.response().body().items().item();
 		if (items == null) {
 			items = List.of();
 		}
