@@ -3,6 +3,7 @@ package com.drrk.collector.client.airport;
 import com.drrk.collector.congestion.RailroadOperationItem;
 import com.drrk.collector.congestion.RailroadOperationSnapshot;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
@@ -20,13 +21,23 @@ public class RailroadOperationMapper {
 		if (items == null) {
 			items = List.of();
 		}
-		List<RailroadOperationItem> selected = items.stream()
+		List<RailroadCandidate> candidates = items.stream()
 				.filter(Objects::nonNull)
 				.map(this::mapItem)
 				.flatMap(Optional::stream)
-				.filter(candidate -> !candidate.arrivalTime().isBefore(collectedAt))
 				.sorted(Comparator.comparing(RailroadCandidate::arrivalTime))
-				.limit(MAX_UPCOMING_ITEMS)
+				.toList();
+		Optional<RailroadCandidate> latestPast = candidates.stream()
+				.filter(candidate -> candidate.arrivalTime().isBefore(collectedAt))
+				.max(Comparator.comparing(RailroadCandidate::arrivalTime));
+		int upcomingLimit = MAX_UPCOMING_ITEMS - (latestPast.isPresent() ? 1 : 0);
+		List<RailroadCandidate> selectedCandidates = new ArrayList<>();
+		latestPast.ifPresent(selectedCandidates::add);
+		selectedCandidates.addAll(candidates.stream()
+				.filter(candidate -> !candidate.arrivalTime().isBefore(collectedAt))
+				.limit(upcomingLimit)
+				.toList());
+		List<RailroadOperationItem> selected = selectedCandidates.stream()
 				.map(RailroadCandidate::item)
 				.toList();
 		return new RailroadOperationSnapshot(collectedAt, selected);
