@@ -15,6 +15,14 @@ public record ArrivalStatusApiResponse(Response response) {
 	}
 
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public record Item(String terno, String entrygate, String flightid, String estimatedtime) {
+	public record Item(
+			String terno,
+			String entrygate,
+			String flightid,
+			String estimatedtime,
+			String scheduletime,
+			String korean,
+			String foreigner
+	) {
 	}
 }

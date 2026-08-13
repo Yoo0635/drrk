@@ -32,6 +32,19 @@ class InferenceWindowListenerTest {
 	}
 
 	@Test
+	void usesAmqpMessageIdWhenJsonMessageIdIsMissing() throws IOException {
+		LatestCongestionInputStore store = new LatestCongestionInputStore();
+		InferenceWindowListener listener = listener(store);
+		Channel channel = mock(Channel.class);
+
+		listener.consume(amqpMessage("0f37c542-1fc9-4d50-9f1c-53ebda7edc4c", jsonWithoutMessageId(), 10L), channel);
+
+		assertEquals("0f37c542-1fc9-4d50-9f1c-53ebda7edc4c", store.snapshot().modelMeasurement().messageId());
+		verify(channel).basicAck(10L, false);
+		verify(channel, never()).basicReject(10L, false);
+	}
+
+	@Test
 	void rejectsWhenAmqpAndJsonMessageIdsDiffer() throws IOException {
 		LatestCongestionInputStore store = new LatestCongestionInputStore();
 		InferenceWindowListener listener = listener(store);
@@ -78,6 +91,18 @@ class InferenceWindowListenerTest {
 				  "n_carriers": 3,
 				  "intensity": 0.42,
 				  "count_est": null
+				}
+				""";
+	}
+
+	private String jsonWithoutMessageId() {
+		return """
+				{
+				  "space_id": "desk01",
+				  "ts": 1755000000.0,
+				  "window_sec": 10,
+				  "events": [{"t":1754999993.2,"dur":3.4,"count":3,"conf":0.81}],
+				  "n_carriers": 3
 				}
 				""";
 	}
