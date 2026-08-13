@@ -52,7 +52,7 @@ class AirportGuideControllerTest {
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.recommendedRoute").value("B"))
 				.andExpect(jsonPath("$.routes[0].route").value("B"))
-				.andExpect(jsonPath("$.routes[0].congestionStatus").value("AVAILABLE"))
+				.andExpect(jsonPath("$.routes[0].congestionStatus").value("NORMAL"))
 				.andExpect(jsonPath("$.routes[0].totalTravelTimeSeconds").value(80));
 	}
 
@@ -78,7 +78,7 @@ class AirportGuideControllerTest {
 				1,
 				3,
 				3 / 4.2,
-				MovingWalkwayStatus.AVAILABLE,
+				MovingWalkwayStatus.NORMAL,
 				20,
 				80
 		);

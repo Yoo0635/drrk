@@ -98,7 +98,7 @@ class CongestionCalculatedMessageParserTest {
 				  "calculationVersion": "moving-walkway-v1",
 				  "status": "CALCULATED",
 				  "score": 0.7142857142857143,
-				  "level": "AVAILABLE",
+				  "level": "NORMAL",
 				  "inputs": {
 				    "arrivalStatusCollectedAt": "2026-08-13T02:59:00Z",
 				    "arrivalStatusItemCount": 2,
@@ -110,7 +110,7 @@ class CongestionCalculatedMessageParserTest {
 				    "modelMeasuredAt": "2026-08-13T02:59:50Z"
 				  },
 				  "routeResults": [
-				    {"route":"B","walkwayArrivalTime":"2026-08-13T03:01:00Z","stay":1,"incoming":1,"residual":1,"load":3,"volumeCapacityRatio":0.7142857142857143,"congestionStatus":"AVAILABLE","passageTimeSeconds":20,"totalTravelTimeSeconds":80},
+				    {"route":"B","walkwayArrivalTime":"2026-08-13T03:01:00Z","stay":1,"incoming":1,"residual":1,"load":3,"volumeCapacityRatio":0.7142857142857143,"congestionStatus":"NORMAL","passageTimeSeconds":20,"totalTravelTimeSeconds":80},
 				    {"route":"C","walkwayArrivalTime":"2026-08-13T03:01:10Z","stay":2,"incoming":2,"residual":2,"load":6,"volumeCapacityRatio":1.4285714285714286,"congestionStatus":"CONGESTED","passageTimeSeconds":40,"totalTravelTimeSeconds":100}
 				  ],
 				  "recommendedRoute": "B",
