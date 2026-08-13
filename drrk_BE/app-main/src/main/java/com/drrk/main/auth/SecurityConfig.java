@@ -34,6 +34,7 @@ public class SecurityConfig {
 								"/api/v1/auth/signup", "/api/v1/auth/email-verifications",
 								"/api/v1/auth/email-verifications/confirm"))
 				.authorizeHttpRequests(auth -> auth
+						.requestMatchers(HttpMethod.GET, "/healthz").permitAll()
 						.requestMatchers(HttpMethod.GET, "/api/v1/auth/csrf").permitAll()
 						.requestMatchers(HttpMethod.GET,
 								"/api/v1/routes/recommendation",
