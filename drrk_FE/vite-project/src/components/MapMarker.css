@@ -1,26 +1,21 @@
 .map-marker {
   position: absolute;
   transform: translate(-50%, -50%); /* left/top이 마커의 '중심'이 되도록 보정 */
-
   display: flex;
   align-items: center;
   gap: 6px;
-
   padding: 6px 12px;
   margin: 0;
-
   background: rgba(255, 255, 255, 0.94);
   border: 1px solid #e5e7eb;
   border-radius: 999px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-
   font-family: inherit;             /* button은 폰트를 상속하지 않는다 */
   font-size: clamp(11px, 0.85vw, 15px);
   font-weight: 600;
   line-height: 1;
   color: #1f2937;
   white-space: nowrap;
-
   cursor: pointer;
   transition: transform 0.15s, box-shadow 0.15s;
 }

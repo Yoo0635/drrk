@@ -32,6 +32,7 @@ function MapMarker({ marker, selected, onSelect }: Props) {
       style={{ left: `${marker.x}%`, top: `${marker.y}%` }}
       onClick={handleClick}
       aria-pressed={selected}
+      aria-label={getMarkerLabel(marker)}
     >
       <span className="map-marker__icon">
         <MarkerIcon type={marker.type} />
