@@ -38,7 +38,8 @@ public class SecurityConfig {
 						.requestMatchers(HttpMethod.GET, "/api/v1/auth/csrf").permitAll()
 						.requestMatchers(HttpMethod.GET,
 								"/api/v1/routes/recommendation",
-								"/api/v1/airport-railroad/arrivals").permitAll()
+								"/api/v1/airport-railroad/arrivals",
+								"/api/v1/inference/carriers/stream").permitAll()
 						.requestMatchers(HttpMethod.POST, "/api/v1/auth/**").permitAll()
 						.anyRequest().authenticated())
 				.addFilterBefore(

@@ -4,6 +4,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 
 import com.rabbitmq.client.Channel;
 import java.io.IOException;
+import java.time.Instant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.Message;
@@ -18,13 +19,16 @@ public class InferenceWindowListener {
 
 	private final InferenceWindowMessageParser parser;
 	private final InferenceWindowIngestionService ingestionService;
+	private final LatestInferenceSnapshotStore latestSnapshotStore;
 
 	public InferenceWindowListener(
 			InferenceWindowMessageParser parser,
-			InferenceWindowIngestionService ingestionService
+			InferenceWindowIngestionService ingestionService,
+			LatestInferenceSnapshotStore latestSnapshotStore
 	) {
 		this.parser = parser;
 		this.ingestionService = ingestionService;
+		this.latestSnapshotStore = latestSnapshotStore;
 	}
 
 	@RabbitListener(
@@ -109,6 +113,14 @@ public class InferenceWindowListener {
 			}
 		}
 		channel.basicAck(deliveryTag, false);
+		if (result == InferenceIngestionResult.STORED) {
+			latestSnapshotStore.updateIfLatest(new LatestInferenceSnapshot(
+					message.messageId(),
+					message.spaceId(),
+					Instant.ofEpochMilli((long) (message.ts() * 1000)),
+					message.nCarriers()
+			));
+		}
 		logSuccess(message, result, attempt);
 	}
 
