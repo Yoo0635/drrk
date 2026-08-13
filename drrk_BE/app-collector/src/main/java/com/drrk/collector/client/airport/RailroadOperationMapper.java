@@ -33,15 +33,23 @@ public class RailroadOperationMapper {
 	}
 
 	private Optional<RailroadCandidate> mapItem(RailroadOperationApiResponse.Item item) {
+		String trainNumber = normalize(item.trnNo());
+		String stationCode = normalize(item.stnCd());
 		String arrivalTimeText = normalize(item.accomArrvDttm());
+
+		// Validate identity fields are not blank
+		if (trainNumber.isBlank() || stationCode.isBlank()) {
+			return Optional.empty();
+		}
+
 		Optional<Instant> arrivalTime = AirportDateTimeParser.parse(arrivalTimeText);
 		if (arrivalTime.isEmpty()) {
 			return Optional.empty();
 		}
 		return Optional.of(new RailroadCandidate(
 				new RailroadOperationItem(
-						normalize(item.trnNo()),
-						normalize(item.stnCd()),
+						trainNumber,
+						stationCode,
 						arrivalTimeText,
 						null,
 						normalizeBlankToNull(item.accomDptrDttm()),

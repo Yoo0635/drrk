@@ -183,4 +183,48 @@ class AirportResponseMapperTest {
 
 		assertThrows(AirportApiResponseException.class, () -> new ArrivalStatusMapper().map(response, collectedAt));
 	}
+
+	@Test
+	void railroadMapperRejectsBlankTrainNumber() throws Exception {
+		RailroadOperationApiResponse response = objectMapper.readValue("""
+				{
+				  "response": {
+				    "header": {"resultCode": "00", "resultMsg": "NORMAL SERVICE."},
+				    "body": {"items": [
+				      {"trnNo": "", "stnCd": "110", "accomArrvDttm": "20260813090000", "accomDptrDttm": "20260813090100", "trnClsfNm": "LOCAL"},
+				      {"trnNo": "   ", "stnCd": "111", "accomArrvDttm": "20260813090100", "accomDptrDttm": "20260813090200", "trnClsfNm": "LOCAL"},
+				      {"trnNo": "A0900", "stnCd": "110", "accomArrvDttm": "20260813090200", "accomDptrDttm": "20260813090300", "trnClsfNm": "LOCAL"}
+				    ]}
+				  }
+				}
+				""", RailroadOperationApiResponse.class);
+
+		RailroadOperationSnapshot snapshot = new RailroadOperationMapper().map(response, collectedAt);
+
+		assertEquals(List.of("A0900"), snapshot.items().stream()
+				.map(RailroadOperationItem::trainNumber)
+				.toList());
+	}
+
+	@Test
+	void railroadMapperRejectsBlankStationCode() throws Exception {
+		RailroadOperationApiResponse response = objectMapper.readValue("""
+				{
+				  "response": {
+				    "header": {"resultCode": "00", "resultMsg": "NORMAL SERVICE."},
+				    "body": {"items": [
+				      {"trnNo": "A0900", "stnCd": "", "accomArrvDttm": "20260813090000", "accomDptrDttm": "20260813090100", "trnClsfNm": "LOCAL"},
+				      {"trnNo": "A0901", "stnCd": "   ", "accomArrvDttm": "20260813090100", "accomDptrDttm": "20260813090200", "trnClsfNm": "LOCAL"},
+				      {"trnNo": "A0902", "stnCd": "110", "accomArrvDttm": "20260813090200", "accomDptrDttm": "20260813090300", "trnClsfNm": "LOCAL"}
+				    ]}
+				  }
+				}
+				""", RailroadOperationApiResponse.class);
+
+		RailroadOperationSnapshot snapshot = new RailroadOperationMapper().map(response, collectedAt);
+
+		assertEquals(List.of("A0902"), snapshot.items().stream()
+				.map(RailroadOperationItem::trainNumber)
+				.toList());
+	}
 }
