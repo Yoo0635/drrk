@@ -8,6 +8,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Optional;
 
 public class ArrivalStatusMapper {
@@ -24,6 +25,7 @@ public class ArrivalStatusMapper {
 			items = List.of();
 		}
 		List<ArrivalStatusItem> selected = items.stream()
+				.filter(Objects::nonNull)
 				.filter(this::isTerminalOneGateBOrC)
 				.map(this::mapItem)
 				.flatMap(Optional::stream)

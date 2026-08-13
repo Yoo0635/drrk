@@ -51,10 +51,16 @@ public class CollectorPipelineConfiguration {
 			Clock clock,
 			MovingWalkwayProperties properties
 	) {
+		double carriersPerPassenger = properties.requiredCarriersPerPassenger();
+		if (!Double.isFinite(carriersPerPassenger) || carriersPerPassenger <= 0) {
+			throw new IllegalArgumentException(
+					"requiredCarriersPerPassenger must be a finite positive value, got: " + carriersPerPassenger
+			);
+		}
 		return new MovingWalkwayCongestionCalculator(
 				clock,
 				UUID::randomUUID,
-				properties.requiredCarriersPerPassenger(),
+				carriersPerPassenger,
 				properties.routeDefinition(AirportRoute.B),
 				properties.routeDefinition(AirportRoute.C)
 		);

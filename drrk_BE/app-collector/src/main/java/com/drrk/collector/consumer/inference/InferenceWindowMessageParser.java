@@ -1,6 +1,7 @@
 package com.drrk.collector.consumer.inference;
 
 import com.drrk.collector.congestion.ModelMeasurementSnapshot;
+import java.time.DateTimeException;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -50,6 +51,11 @@ public class InferenceWindowMessageParser {
 		if (message.ts() == null || !Double.isFinite(message.ts())) {
 			throw new InvalidInferenceMessageException("ts must be finite");
 		}
+		try {
+			toInstant(message.ts());
+		} catch (DateTimeException exception) {
+			throw new InvalidInferenceMessageException("ts must be a valid timestamp", exception);
+		}
 		if (message.carrierCount() == null || message.carrierCount() < 0) {
 			throw new InvalidInferenceMessageException("n_carriers must be non-negative");
 		}
@@ -58,7 +64,14 @@ public class InferenceWindowMessageParser {
 			throw new InvalidInferenceMessageException("events must not be null");
 		}
 		events.forEach(event -> validateEvent(event, message.ts(), message.windowSec()));
-		long derivedCarrierCount = events.stream().mapToLong(InferenceEvent::count).sum();
+		long derivedCarrierCount;
+		try {
+			derivedCarrierCount = events.stream()
+					.mapToLong(InferenceEvent::count)
+					.reduce(0L, Math::addExact);
+		} catch (ArithmeticException exception) {
+			throw new InvalidInferenceMessageException("event counts overflow", exception);
+		}
 		if (message.carrierCount() != derivedCarrierCount) {
 			throw new InvalidInferenceMessageException("n_carriers must match event counts");
 		}

@@ -16,6 +16,9 @@ public record RouteCongestionResult(
 		long totalTravelTimeSeconds
 ) {
 
+	private static final double CAPACITY = 4.2;
+	private static final double EPSILON = 1e-9;
+
 	public RouteCongestionResult {
 		Objects.requireNonNull(route, "route");
 		Objects.requireNonNull(walkwayArrivalTime, "walkwayArrivalTime");
@@ -27,6 +30,26 @@ public record RouteCongestionResult(
 		requireNonNegativeFinite(volumeCapacityRatio, "volumeCapacityRatio");
 		if (passageTimeSeconds < 0 || totalTravelTimeSeconds < passageTimeSeconds) {
 			throw new IllegalArgumentException("Travel times must be non-negative and total must include passage time");
+		}
+		double expectedLoad = stay + incoming + residual;
+		if (Math.abs(load - expectedLoad) > EPSILON) {
+			throw new IllegalArgumentException(
+					"load must equal stay + incoming + residual (expected " + expectedLoad + ", got " + load + ")"
+			);
+		}
+		double expectedRatio = load / CAPACITY;
+		if (Math.abs(volumeCapacityRatio - expectedRatio) > EPSILON) {
+			throw new IllegalArgumentException(
+					"volumeCapacityRatio must equal load / " + CAPACITY + " (expected " + expectedRatio + ", got " + volumeCapacityRatio + ")"
+			);
+		}
+		MovingWalkwayStatus expectedStatus = volumeCapacityRatio > 1.0
+				? MovingWalkwayStatus.CONGESTED
+				: MovingWalkwayStatus.AVAILABLE;
+		if (congestionStatus != expectedStatus) {
+			throw new IllegalArgumentException(
+					"congestionStatus must match volumeCapacityRatio (expected " + expectedStatus + " for ratio " + volumeCapacityRatio + ", got " + congestionStatus + ")"
+			);
 		}
 	}
 

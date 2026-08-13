@@ -4,6 +4,7 @@ import com.drrk.collector.congestion.RailroadOperationItem;
 import com.drrk.collector.congestion.RailroadOperationSnapshot;
 import java.time.Instant;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 public class RailroadOperationMapper {
@@ -17,6 +18,7 @@ public class RailroadOperationMapper {
 			items = List.of();
 		}
 		List<RailroadOperationItem> selected = items.stream()
+				.filter(Objects::nonNull)
 				.map(this::mapItem)
 				.flatMap(Optional::stream)
 				.toList();
