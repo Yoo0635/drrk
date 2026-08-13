@@ -24,6 +24,7 @@ import { MiniTable } from "./components/MiniTable";
 import { Panel } from "./components/Panel";
 import { ParkingBar } from "./components/ParkingBar";
 import { RealtimeCongestionChart } from "./components/RealtimeCongestionChart";
+import { useCarrierCountSamples } from "./hooks/useCarrierCountSamples";
 import { StatTable } from "./components/StatTable";
 import type { ChartCfg } from "./types";
 
@@ -66,6 +67,8 @@ function ChartRow({ icon, cfg }: { icon: "arr" | "plane"; cfg: ChartCfg }) {
 }
 
 export default function App() {
+  const { samples: carrierSamples, connectionStatus } = useCarrierCountSamples();
+
   return (
     <div
       style={{
@@ -371,7 +374,10 @@ export default function App() {
               flexDirection: "column",
             }}
           >
-            <RealtimeCongestionChart />
+            <RealtimeCongestionChart
+              samples={carrierSamples}
+              connectionStatus={connectionStatus}
+            />
             <div
               style={{
                 display: "none",
