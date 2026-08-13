@@ -1,21 +1,20 @@
 /*
- * 프레임은 렌더링된 이미지 크기에 딱 맞게 줄어든다.
- * 그래야 마커의 % 좌표가 이미지와 정확히 일치한다.
- * 주의: 여기에 container-type을 넣으면 크기 컨테인먼트 때문에
- *       너비가 0으로 계산되어 지도가 사라진다.
+ * 프레임은 부모 폭을 100% 채우고, 이미지 높이가 프레임 높이를 결정한다.
+ * 이 방식이면 좌우 여백이 생기지 않으면서도
+ * 마커의 % 좌표가 이미지와 정확히 일치한다.
+ *
+ * 주의 1: max-height로 높이를 제한하면 좌우에 여백이 생긴다.
+ * 주의 2: container-type을 넣으면 너비가 0으로 계산되어 지도가 사라진다.
  */
 .map-frame {
   position: relative;      /* 마커 좌표의 기준점 */
-  display: inline-block;
+  display: block;
+  width: 100%;
   line-height: 0;          /* img 아래 여백 제거 */
-  max-width: 100%;
-  max-height: 100%;
 }
 
 .map-frame__image {
   display: block;
-  width: auto;
+  width: 100%;
   height: auto;
-  max-width: 100%;
-  max-height: var(--map-height, 67vh); /* object-fit 없이 비율 유지 */
 }

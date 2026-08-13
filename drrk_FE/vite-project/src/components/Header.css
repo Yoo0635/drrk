@@ -1,0 +1,95 @@
+/* 프로스티드 상단 바 — 스크롤 시 지도 위에 떠 있는다 */
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+
+  height: var(--header-height);
+  padding: 0 var(--space-lg);
+
+  background: var(--frosted);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.header__brand {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
+.header__wordmark {
+  font-size: 21px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.header__place {
+  font-size: 14px;
+  color: var(--ink-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.header__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+}
+
+.header__time {
+  font-size: 13px;
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+
+/* 혼잡도 범례 */
+.legend {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.legend__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.legend__item--free   { color: var(--status-free); }
+.legend__item--normal { color: var(--status-normal); }
+.legend__item--busy   { color: var(--status-busy); }
+
+@media (max-width: 700px) {
+  .header {
+    padding: 0 var(--space-md);
+  }
+
+  .header__place,
+  .legend {
+    display: none;         /* 좁은 화면에서는 워드마크와 시각만 */
+  }
+}
