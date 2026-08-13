@@ -1,5 +1,6 @@
 package com.drrk.collector.client.airport;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.util.List;
 
@@ -15,6 +16,13 @@ public record RailroadOperationApiResponse(Response response) {
 	}
 
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public record Item(String trnNo, String stnCd, String planArrvDttm, String accomArrvDttm, String trnClsNm) {
+	public record Item(
+			String trnNo,
+			String stnCd,
+			String planArrvDttm,
+			String accomArrvDttm,
+			String accomDptrDttm,
+			@JsonAlias("trnClsNm") String trnClsfNm
+	) {
 	}
 }

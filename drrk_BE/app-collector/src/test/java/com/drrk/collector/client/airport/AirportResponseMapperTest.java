@@ -44,8 +44,39 @@ class AirportResponseMapperTest {
 
 		assertEquals(collectedAt, snapshot.collectedAt());
 		assertEquals(List.of(
-				new ArrivalStatusItem("B", "KE001", "202608131200", 10, 4),
-				new ArrivalStatusItem("C", "OZ002", "202608131205", 0, 7)
+				new ArrivalStatusItem("B", "KE001", "202608131200", 10, 4)
+		), snapshot.items());
+	}
+
+	@Test
+	void arrivalMapperKeepsCurrentAndNextFiveFlightsOrderedByEstimatedTime() throws Exception {
+		ArrivalStatusApiResponse response = objectMapper.readValue("""
+				{
+				  "response": {
+				    "header": {"resultCode": "00", "resultMsg": "NORMAL SERVICE."},
+				    "body": {"items": [
+				      {"terno":"T1","entrygate":"B","flightid":"KE0906","estimatedtime":"202608130906","korean":"6","foreigner":"0"},
+				      {"terno":"T1","entrygate":"C","flightid":"KE0859","estimatedtime":"202608130859","korean":"59","foreigner":"0"},
+				      {"terno":"T1","entrygate":"B","flightid":"KE0902","estimatedtime":"202608130902","korean":"2","foreigner":"0"},
+				      {"terno":"T1","entrygate":"C","flightid":"KE0900","estimatedtime":"202608130900","korean":"0","foreigner":"0"},
+				      {"terno":"T1","entrygate":"B","flightid":"KE0905","estimatedtime":"202608130905","korean":"5","foreigner":"0"},
+				      {"terno":"T1","entrygate":"C","flightid":"KE0901","estimatedtime":"202608130901","korean":"1","foreigner":"0"},
+				      {"terno":"T1","entrygate":"B","flightid":"KE0904","estimatedtime":"202608130904","korean":"4","foreigner":"0"},
+				      {"terno":"T1","entrygate":"C","flightid":"KE0903","estimatedtime":"202608130903","korean":"3","foreigner":"0"},
+				      {"terno":"T1","entrygate":"B","flightid":"KE0907","estimatedtime":"202608130907","korean":"7","foreigner":"0"}
+				    ]}
+				  }
+				}
+				""", ArrivalStatusApiResponse.class);
+
+		ArrivalStatusSnapshot snapshot = new ArrivalStatusMapper().map(response, collectedAt);
+
+		assertEquals(List.of(
+				new ArrivalStatusItem("C", "KE0900", "202608130900", 0, 0),
+				new ArrivalStatusItem("C", "KE0901", "202608130901", 1, 0),
+				new ArrivalStatusItem("B", "KE0902", "202608130902", 2, 0),
+				new ArrivalStatusItem("C", "KE0903", "202608130903", 3, 0),
+				new ArrivalStatusItem("B", "KE0904", "202608130904", 4, 0)
 		), snapshot.items());
 	}
 
@@ -76,9 +107,9 @@ class AirportResponseMapperTest {
 				  "response": {
 				    "header": {"resultCode": "00", "resultMsg": "NORMAL SERVICE."},
 				    "body": {"items": [
-				      {"trnNo": "A2002", "stnCd": " 110 ", "planArrvDttm": "20260813050800", "accomArrvDttm": "20260813050900", "trnClsNm": "AREX"},
-				      {"trnNo": "A2003", "stnCd": "111", "planArrvDttm": "20260813060800", "accomArrvDttm": "", "trnClsNm": "LOCAL"},
-				      {"trnNo": "A2004", "stnCd": "112", "planArrvDttm": "", "accomArrvDttm": "20260813070900", "trnClsNm": "LOCAL"}
+				      {"trnNo": "A2002", "stnCd": " 110 ", "accomArrvDttm": "20260813090900", "accomDptrDttm": "20260813091000", "trnClsfNm": "AREX"},
+				      {"trnNo": "A2003", "stnCd": "111", "accomArrvDttm": "20260813100800", "accomDptrDttm": "20260813100900", "trnClsNm": "LOCAL"},
+				      {"trnNo": "A2004", "stnCd": "112", "accomArrvDttm": "", "accomDptrDttm": "20260813110900", "trnClsfNm": "LOCAL"}
 				    ]}
 				  }
 				}
@@ -88,11 +119,43 @@ class AirportResponseMapperTest {
 
 		assertEquals(
 				List.of(
-						new RailroadOperationItem("A2002", "110", "20260813050800", "20260813050900", "AREX"),
-						new RailroadOperationItem("A2003", "111", "20260813060800", null, "LOCAL")
+						new RailroadOperationItem(
+								"A2002", "110", "20260813090900", null, "20260813091000", "AREX"
+						),
+						new RailroadOperationItem(
+								"A2003", "111", "20260813100800", null, "20260813100900", "LOCAL"
+						)
 				),
 				snapshot.items()
 		);
+	}
+
+	@Test
+	void railroadMapperKeepsCurrentAndNextFiveTrainsOrderedByArrivalTime() throws Exception {
+		RailroadOperationApiResponse response = objectMapper.readValue("""
+				{
+				  "response": {
+				    "header": {"resultCode": "00", "resultMsg": "NORMAL SERVICE."},
+				    "body": {"items": [
+				      {"trnNo":"A0906","stnCd":"110","accomArrvDttm":"20260813090600","accomDptrDttm":"20260813090700","trnClsfNm":"LOCAL"},
+				      {"trnNo":"A0859","stnCd":"110","accomArrvDttm":"20260813085959","accomDptrDttm":"20260813090059","trnClsfNm":"LOCAL"},
+				      {"trnNo":"A0902","stnCd":"110","accomArrvDttm":"20260813090200","accomDptrDttm":"20260813090300","trnClsfNm":"LOCAL"},
+				      {"trnNo":"A0900","stnCd":"110","accomArrvDttm":"20260813090000","accomDptrDttm":"20260813090100","trnClsfNm":"LOCAL"},
+				      {"trnNo":"A0905","stnCd":"110","accomArrvDttm":"20260813090500","accomDptrDttm":"20260813090600","trnClsfNm":"LOCAL"},
+				      {"trnNo":"A0901","stnCd":"110","accomArrvDttm":"20260813090100","accomDptrDttm":"20260813090200","trnClsfNm":"LOCAL"},
+				      {"trnNo":"A0904","stnCd":"110","accomArrvDttm":"20260813090400","accomDptrDttm":"20260813090500","trnClsfNm":"LOCAL"},
+				      {"trnNo":"A0903","stnCd":"110","accomArrvDttm":"20260813090300","accomDptrDttm":"20260813090400","trnClsfNm":"LOCAL"},
+				      {"trnNo":"A0907","stnCd":"110","accomArrvDttm":"20260813090700","accomDptrDttm":"20260813090800","trnClsfNm":"LOCAL"}
+				    ]}
+				  }
+				}
+				""", RailroadOperationApiResponse.class);
+
+		RailroadOperationSnapshot snapshot = new RailroadOperationMapper().map(response, collectedAt);
+
+		assertEquals(List.of("A0900", "A0901", "A0902", "A0903", "A0904"), snapshot.items().stream()
+				.map(RailroadOperationItem::trainNumber)
+				.toList());
 	}
 
 	@Test
@@ -119,5 +182,49 @@ class AirportResponseMapperTest {
 				""", ArrivalStatusApiResponse.class);
 
 		assertThrows(AirportApiResponseException.class, () -> new ArrivalStatusMapper().map(response, collectedAt));
+	}
+
+	@Test
+	void railroadMapperRejectsBlankTrainNumber() throws Exception {
+		RailroadOperationApiResponse response = objectMapper.readValue("""
+				{
+				  "response": {
+				    "header": {"resultCode": "00", "resultMsg": "NORMAL SERVICE."},
+				    "body": {"items": [
+				      {"trnNo": "", "stnCd": "110", "accomArrvDttm": "20260813090000", "accomDptrDttm": "20260813090100", "trnClsfNm": "LOCAL"},
+				      {"trnNo": "   ", "stnCd": "111", "accomArrvDttm": "20260813090100", "accomDptrDttm": "20260813090200", "trnClsfNm": "LOCAL"},
+				      {"trnNo": "A0900", "stnCd": "110", "accomArrvDttm": "20260813090200", "accomDptrDttm": "20260813090300", "trnClsfNm": "LOCAL"}
+				    ]}
+				  }
+				}
+				""", RailroadOperationApiResponse.class);
+
+		RailroadOperationSnapshot snapshot = new RailroadOperationMapper().map(response, collectedAt);
+
+		assertEquals(List.of("A0900"), snapshot.items().stream()
+				.map(RailroadOperationItem::trainNumber)
+				.toList());
+	}
+
+	@Test
+	void railroadMapperRejectsBlankStationCode() throws Exception {
+		RailroadOperationApiResponse response = objectMapper.readValue("""
+				{
+				  "response": {
+				    "header": {"resultCode": "00", "resultMsg": "NORMAL SERVICE."},
+				    "body": {"items": [
+				      {"trnNo": "A0900", "stnCd": "", "accomArrvDttm": "20260813090000", "accomDptrDttm": "20260813090100", "trnClsfNm": "LOCAL"},
+				      {"trnNo": "A0901", "stnCd": "   ", "accomArrvDttm": "20260813090100", "accomDptrDttm": "20260813090200", "trnClsfNm": "LOCAL"},
+				      {"trnNo": "A0902", "stnCd": "110", "accomArrvDttm": "20260813090200", "accomDptrDttm": "20260813090300", "trnClsfNm": "LOCAL"}
+				    ]}
+				  }
+				}
+				""", RailroadOperationApiResponse.class);
+
+		RailroadOperationSnapshot snapshot = new RailroadOperationMapper().map(response, collectedAt);
+
+		assertEquals(List.of("A0902"), snapshot.items().stream()
+				.map(RailroadOperationItem::trainNumber)
+				.toList());
 	}
 }

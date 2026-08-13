@@ -3,11 +3,14 @@ package com.drrk.collector.client.airport;
 import com.drrk.collector.congestion.RailroadOperationItem;
 import com.drrk.collector.congestion.RailroadOperationSnapshot;
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
 public class RailroadOperationMapper {
+
+	private static final int MAX_UPCOMING_ITEMS = 5;
 
 	public RailroadOperationSnapshot map(RailroadOperationApiResponse apiResponse, Instant collectedAt) {
 		apiResponse.response().header().requireSuccess();
@@ -21,21 +24,38 @@ public class RailroadOperationMapper {
 				.filter(Objects::nonNull)
 				.map(this::mapItem)
 				.flatMap(Optional::stream)
+				.filter(candidate -> !candidate.arrivalTime().isBefore(collectedAt))
+				.sorted(Comparator.comparing(RailroadCandidate::arrivalTime))
+				.limit(MAX_UPCOMING_ITEMS)
+				.map(RailroadCandidate::item)
 				.toList();
 		return new RailroadOperationSnapshot(collectedAt, selected);
 	}
 
-	private Optional<RailroadOperationItem> mapItem(RailroadOperationApiResponse.Item item) {
-		String scheduledArrivalTime = normalize(item.planArrvDttm());
-		if (scheduledArrivalTime.isBlank()) {
+	private Optional<RailroadCandidate> mapItem(RailroadOperationApiResponse.Item item) {
+		String trainNumber = normalize(item.trnNo());
+		String stationCode = normalize(item.stnCd());
+		String arrivalTimeText = normalize(item.accomArrvDttm());
+
+		// Validate identity fields are not blank
+		if (trainNumber.isBlank() || stationCode.isBlank()) {
 			return Optional.empty();
 		}
-		return Optional.of(new RailroadOperationItem(
-				normalize(item.trnNo()),
-				normalize(item.stnCd()),
-				scheduledArrivalTime,
-				normalizeBlankToNull(item.accomArrvDttm()),
-				normalize(item.trnClsNm())
+
+		Optional<Instant> arrivalTime = AirportDateTimeParser.parse(arrivalTimeText);
+		if (arrivalTime.isEmpty()) {
+			return Optional.empty();
+		}
+		return Optional.of(new RailroadCandidate(
+				new RailroadOperationItem(
+						trainNumber,
+						stationCode,
+						arrivalTimeText,
+						null,
+						normalizeBlankToNull(item.accomDptrDttm()),
+						normalize(item.trnClsfNm())
+				),
+				arrivalTime.orElseThrow()
 		));
 	}
 
@@ -46,5 +66,8 @@ public class RailroadOperationMapper {
 
 	private String normalize(String value) {
 		return value == null ? "" : value.trim();
+	}
+
+	private record RailroadCandidate(RailroadOperationItem item, Instant arrivalTime) {
 	}
 }
