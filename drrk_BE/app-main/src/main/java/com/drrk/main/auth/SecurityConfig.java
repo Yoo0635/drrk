@@ -35,6 +35,9 @@ public class SecurityConfig {
 								"/api/v1/auth/email-verifications/confirm"))
 				.authorizeHttpRequests(auth -> auth
 						.requestMatchers(HttpMethod.GET, "/api/v1/auth/csrf").permitAll()
+						.requestMatchers(HttpMethod.GET,
+								"/api/v1/routes/recommendation",
+								"/api/v1/airport-railroad/arrivals").permitAll()
 						.requestMatchers(HttpMethod.POST, "/api/v1/auth/**").permitAll()
 						.anyRequest().authenticated())
 				.addFilterBefore(

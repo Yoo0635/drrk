@@ -76,14 +76,14 @@ public class CongestionRabbitConfiguration {
 	}
 
 	@Bean
-	CongestionResultHandler congestionResultHandler() {
-		return new LoggingCongestionResultHandler();
+	LatestAirportGuideStore latestAirportGuideStore() {
+		return new LatestAirportGuideStore();
 	}
 
 	@Bean
 	CongestionResultListener congestionResultListener(
 			CongestionCalculatedMessageParser parser,
-			CongestionResultHandler handler
+			LatestAirportGuideStore handler
 	) {
 		return new CongestionResultListener(parser, handler);
 	}

@@ -2,11 +2,18 @@ package com.drrk.main.consumer.congestion;
 
 import com.drrk.messaging.congestion.CongestionCalculatedMessage;
 import com.drrk.messaging.congestion.CongestionCalculationStatus;
+import com.drrk.messaging.congestion.MovingWalkwayStatus;
+import com.drrk.messaging.congestion.RouteCongestionResult;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.UUID;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 
 public class CongestionCalculatedMessageParser {
+
+	private static final double CAPACITY = 4.2;
+	private static final double EPSILON = 1.0e-9;
 
 	private final ObjectMapper objectMapper;
 
@@ -30,22 +37,66 @@ public class CongestionCalculatedMessageParser {
 
 	private void validate(CongestionCalculatedMessage message) {
 		validateUuidV4(message.messageId(), "messageId");
-		if (!"1.0".equals(message.schemaVersion())) {
+		if (!"2.0".equals(message.schemaVersion())) {
 			throw new InvalidCongestionMessageException("Unsupported schemaVersion");
 		}
 		if (message.status() == CongestionCalculationStatus.FORMULA_PENDING) {
 			if (!"formula-pending-v0".equals(message.calculationVersion())
 					|| message.score() != null
-					|| message.level() != null) {
+					|| message.level() != null
+					|| !message.routeResults().isEmpty()
+					|| message.recommendedRoute() != null
+					|| !message.railroadArrivals().isEmpty()) {
 				throw new InvalidCongestionMessageException("Invalid FORMULA_PENDING payload");
 			}
 		}
-		if (message.status() == CongestionCalculationStatus.CALCULATED
-				&& (message.score() == null || !Double.isFinite(message.score())
-				|| message.level() == null || message.level().isBlank())) {
-			throw new InvalidCongestionMessageException("Invalid CALCULATED payload");
+		if (message.status() == CongestionCalculationStatus.CALCULATED) {
+			validateCalculated(message);
 		}
 		validateUuidV4(message.inputs().modelMessageId(), "inputs.modelMessageId");
+	}
+
+	private void validateCalculated(CongestionCalculatedMessage message) {
+		if (message.calculationVersion() == null || message.calculationVersion().isBlank()
+				|| message.routeResults().isEmpty() || message.routeResults().size() > 2
+				|| new HashSet<>(message.routeResults().stream().map(RouteCongestionResult::route).toList()).size()
+				!= message.routeResults().size()) {
+			throw new InvalidCongestionMessageException("Invalid CALCULATED routes");
+		}
+		RouteCongestionResult recommended = message.routeResults().stream()
+				.filter(result -> result.route() == message.recommendedRoute())
+				.findFirst()
+				.orElseThrow(() -> new InvalidCongestionMessageException("Recommended route is missing"));
+		if (message.score() == null || !Double.isFinite(message.score())
+				|| Double.compare(message.score(), recommended.volumeCapacityRatio()) != 0
+				|| !recommended.congestionStatus().name().equals(message.level())) {
+			throw new InvalidCongestionMessageException("Invalid CALCULATED summary");
+		}
+		for (RouteCongestionResult result : message.routeResults()) {
+			double expectedLoad = result.stay() + result.incoming() + result.residual();
+			if (!nearlyEqual(result.load(), expectedLoad)
+					|| !nearlyEqual(result.volumeCapacityRatio(), result.load() / CAPACITY)) {
+				throw new InvalidCongestionMessageException("Route congestion formula is inconsistent");
+			}
+			MovingWalkwayStatus expected = result.volumeCapacityRatio() > 1d
+					? MovingWalkwayStatus.CONGESTED
+					: MovingWalkwayStatus.AVAILABLE;
+			if (result.congestionStatus() != expected) {
+				throw new InvalidCongestionMessageException("Route congestion status does not match v/c");
+			}
+		}
+		RouteCongestionResult fastest = message.routeResults().stream()
+				.min(Comparator.comparingLong(RouteCongestionResult::totalTravelTimeSeconds)
+						.thenComparing(RouteCongestionResult::route))
+				.orElseThrow();
+		if (fastest.route() != message.recommendedRoute()) {
+			throw new InvalidCongestionMessageException("Recommended route is not the shortest route");
+		}
+	}
+
+	private boolean nearlyEqual(double left, double right) {
+		double scale = Math.max(1d, Math.max(Math.abs(left), Math.abs(right)));
+		return Math.abs(left - right) <= EPSILON * scale;
 	}
 
 	private void validateUuidV4(String value, String field) {
