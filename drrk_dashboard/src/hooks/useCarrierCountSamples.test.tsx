@@ -99,4 +99,40 @@ describe("useCarrierCountSamples", () => {
 
     expect(FakeEventSource.instances[0].closed).toBe(true);
   });
+
+  it("clears existing samples when no new carrier events arrive within the stale window", async () => {
+    const { result } = renderHook(() =>
+      useCarrierCountSamples({
+        baseUrl: "http://localhost:8080",
+        EventSourceCtor: FakeEventSource as unknown as typeof EventSource,
+        now: () => new Date("2026-08-13T05:30:00.000Z"),
+        staleAfterMs: 5,
+      }),
+    );
+
+    act(() => {
+      FakeEventSource.instances[0].onopen?.();
+      FakeEventSource.instances[0].emitCarrierCount({
+        n_carriers: 2,
+        score: 0.25,
+        level: "LOW",
+      });
+    });
+
+    expect(result.current.carrierSamples).toEqual([
+      { value: 1, timestamp: Date.parse("2026-08-13T05:30:00.000Z") },
+    ]);
+    expect(result.current.scoreSamples).toEqual([
+      {
+        score: 0.25,
+        level: "LOW",
+        timestamp: Date.parse("2026-08-13T05:30:00.000Z"),
+      },
+    ]);
+
+    await waitFor(() => {
+      expect(result.current.carrierSamples).toEqual([]);
+      expect(result.current.scoreSamples).toEqual([]);
+    });
+  });
 });

@@ -2,6 +2,8 @@ package com.drrk.main.consumer.congestion;
 
 import com.drrk.messaging.congestion.CongestionCalculatedMessage;
 import com.drrk.messaging.congestion.CongestionCalculationStatus;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
@@ -33,5 +35,14 @@ public class LatestAirportGuideStore implements CongestionResultHandler {
 
 	public Optional<CongestionCalculatedMessage> latest() {
 		return Optional.ofNullable(latest.get());
+	}
+
+	public Optional<CongestionCalculatedMessage> latestFresh(Instant now, Duration maxAge) {
+		return latest()
+				.filter(message -> isFresh(message.calculatedAt(), now, maxAge));
+	}
+
+	private static boolean isFresh(Instant timestamp, Instant now, Duration maxAge) {
+		return !timestamp.isAfter(now) && Duration.between(timestamp, now).compareTo(maxAge) <= 0;
 	}
 }
