@@ -74,18 +74,19 @@ jobs:
             "Comment": "Deploy drrk main ${{ github.sha }}",
             "Parameters": {
               "commands": [
-                "set -euo pipefail",
+                "set -eu",
                 "test -f /opt/drrk/main/compose.yml",
                 "test -f /opt/drrk/env/main.env",
-                "previous_image=$(grep '^APP_MAIN_IMAGE=' /opt/drrk/env/main.env | cut -d= -f2-)",
+                "previous_image=$(sed -n 's/^APP_MAIN_IMAGE=//p' /opt/drrk/env/main.env)",
+                "test -n \"$previous_image\"",
                 "rollback() { sudo sed -i -E \"s|^APP_MAIN_IMAGE=.*|APP_MAIN_IMAGE=${previous_image}|\" /opt/drrk/env/main.env; docker compose --env-file /opt/drrk/env/main.env -f /opt/drrk/main/compose.yml up -d --no-deps app-main; }",
-                "trap rollback ERR",
+                "trap rollback 0",
                 "sudo sed -i.bak -E 's|^APP_MAIN_IMAGE=.*|APP_MAIN_IMAGE=${{ env.APP_MAIN_IMAGE }}|' /opt/drrk/env/main.env",
                 "docker compose --env-file /opt/drrk/env/main.env -f /opt/drrk/main/compose.yml pull app-main",
                 "docker compose --env-file /opt/drrk/env/main.env -f /opt/drrk/main/compose.yml up -d redis",
                 "docker compose --env-file /opt/drrk/env/main.env -f /opt/drrk/main/compose.yml up -d --no-deps app-main",
                 "docker compose --env-file /opt/drrk/env/main.env -f /opt/drrk/main/compose.yml up -d nginx",
-                "for attempt in $(seq 1 30); do if docker compose --env-file /opt/drrk/env/main.env -f /opt/drrk/main/compose.yml exec -T app-main curl -fsS http://localhost:8080/healthz >/dev/null; then trap - ERR; exit 0; fi; sleep 2; done; rollback; exit 1"
+                "for attempt in $(seq 1 30); do if docker compose --env-file /opt/drrk/env/main.env -f /opt/drrk/main/compose.yml exec -T app-main curl -fsS http://localhost:8080/healthz >/dev/null; then trap - 0; exit 0; fi; sleep 2; done; exit 1"
               ]
             }
           }
@@ -94,7 +95,12 @@ jobs:
             --cli-input-json file://ssm-main.json \
             --query "Command.CommandId" \
             --output text)"
-          aws ssm wait command-executed --command-id "$command_id" --instance-id "${{ vars.MAIN_INSTANCE_ID }}"
+          if ! aws ssm wait command-executed --command-id "$command_id" --instance-id "${{ vars.MAIN_INSTANCE_ID }}"; then
+            aws ssm get-command-invocation --command-id "$command_id" --instance-id "${{ vars.MAIN_INSTANCE_ID }}" \
+              --query "{Status:Status,StandardOutputContent:StandardOutputContent,StandardErrorContent:StandardErrorContent}" \
+              --output json || true
+            exit 1
+          fi
           aws ssm get-command-invocation --command-id "$command_id" --instance-id "${{ vars.MAIN_INSTANCE_ID }}" \
             --query "{Status:Status,StandardOutputContent:StandardOutputContent,StandardErrorContent:StandardErrorContent}" \
             --output json
@@ -126,17 +132,18 @@ jobs:
             "Comment": "Deploy drrk collector ${{ github.sha }}",
             "Parameters": {
               "commands": [
-                "set -euo pipefail",
+                "set -eu",
                 "test -f /opt/drrk/collector/compose.yml",
                 "test -f /opt/drrk/env/collector.env",
-                "previous_image=$(grep '^APP_COLLECTOR_IMAGE=' /opt/drrk/env/collector.env | cut -d= -f2-)",
+                "previous_image=$(sed -n 's/^APP_COLLECTOR_IMAGE=//p' /opt/drrk/env/collector.env)",
+                "test -n \"$previous_image\"",
                 "rollback() { sudo sed -i -E \"s|^APP_COLLECTOR_IMAGE=.*|APP_COLLECTOR_IMAGE=${previous_image}|\" /opt/drrk/env/collector.env; docker compose --env-file /opt/drrk/env/collector.env -f /opt/drrk/collector/compose.yml up -d --no-deps app-collector; }",
-                "trap rollback ERR",
+                "trap rollback 0",
                 "sudo sed -i.bak -E 's|^APP_COLLECTOR_IMAGE=.*|APP_COLLECTOR_IMAGE=${{ env.APP_COLLECTOR_IMAGE }}|' /opt/drrk/env/collector.env",
                 "docker compose --env-file /opt/drrk/env/collector.env -f /opt/drrk/collector/compose.yml pull app-collector",
                 "docker compose --env-file /opt/drrk/env/collector.env -f /opt/drrk/collector/compose.yml up -d rabbitmq",
                 "docker compose --env-file /opt/drrk/env/collector.env -f /opt/drrk/collector/compose.yml up -d --no-deps app-collector",
-                "for attempt in $(seq 1 30); do if docker compose --env-file /opt/drrk/env/collector.env -f /opt/drrk/collector/compose.yml exec -T app-collector curl -fsS http://localhost:8080/healthz >/dev/null; then trap - ERR; exit 0; fi; sleep 2; done; rollback; exit 1"
+                "for attempt in $(seq 1 30); do if docker compose --env-file /opt/drrk/env/collector.env -f /opt/drrk/collector/compose.yml exec -T app-collector curl -fsS http://localhost:8080/healthz >/dev/null; then trap - 0; exit 0; fi; sleep 2; done; exit 1"
               ]
             }
           }
@@ -145,7 +152,12 @@ jobs:
             --cli-input-json file://ssm-collector.json \
             --query "Command.CommandId" \
             --output text)"
-          aws ssm wait command-executed --command-id "$command_id" --instance-id "${{ vars.COLLECTOR_INSTANCE_ID }}"
+          if ! aws ssm wait command-executed --command-id "$command_id" --instance-id "${{ vars.COLLECTOR_INSTANCE_ID }}"; then
+            aws ssm get-command-invocation --command-id "$command_id" --instance-id "${{ vars.COLLECTOR_INSTANCE_ID }}" \
+              --query "{Status:Status,StandardOutputContent:StandardOutputContent,StandardErrorContent:StandardErrorContent}" \
+              --output json || true
+            exit 1
+          fi
           aws ssm get-command-invocation --command-id "$command_id" --instance-id "${{ vars.COLLECTOR_INSTANCE_ID }}" \
             --query "{Status:Status,StandardOutputContent:StandardOutputContent,StandardErrorContent:StandardErrorContent}" \
             --output json
