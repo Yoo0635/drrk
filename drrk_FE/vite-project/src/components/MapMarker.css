@@ -1,0 +1,92 @@
+.map-marker {
+  position: absolute;
+  transform: translate(-50%, -50%); /* left/top이 마커의 '중심'이 되도록 보정 */
+
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  padding: 6px 12px;
+  margin: 0;
+
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid #e5e7eb;
+  border-radius: 999px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+
+  font-family: inherit;             /* button은 폰트를 상속하지 않는다 */
+  font-size: clamp(11px, 0.85vw, 15px);
+  font-weight: 600;
+  line-height: 1;
+  color: #1f2937;
+  white-space: nowrap;
+
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.map-marker:hover {
+  /* transform 재지정 시 translate를 반드시 함께 적어야 위치가 유지된다 */
+  transform: translate(-50%, -50%) scale(1.06);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.16);
+}
+
+.map-marker:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.map-marker.is-selected {
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.25);
+}
+
+.map-marker__icon {
+  display: flex;
+  color: #6b7280;
+}
+
+.map-marker__icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* ── 혼잡도 3단계 ── */
+.map-marker--free {
+  background: #ecfdf5;
+  border-color: #6ee7b7;
+  color: #047857;
+}
+.map-marker--free .map-marker__icon { color: #059669; }
+
+.map-marker--normal {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+}
+.map-marker--normal .map-marker__icon { color: #2563eb; }
+
+.map-marker--busy {
+  background: #fef2f2;
+  border-color: #fca5a5;
+  color: #b91c1c;
+}
+.map-marker--busy .map-marker__icon { color: #dc2626; }
+
+/* ── 현재 위치는 눈에 띄게 ── */
+.map-marker--current {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+  color: #ffffff;
+}
+.map-marker--current .map-marker__icon { color: #ffffff; }
+
+/* 화면이 좁으면 라벨을 숨기고 아이콘만 남긴다 */
+@media (max-width: 700px) {
+  .map-marker {
+    padding: 6px;
+  }
+
+  .map-marker__label {
+    display: none;
+  }
+}
