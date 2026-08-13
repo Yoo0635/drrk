@@ -25,9 +25,6 @@ jobs:
   build-push:
     name: Build and push backend images
     runs-on: ubuntu-latest
-    outputs:
-      app_main_image: ${{ steps.images.outputs.app_main_image }}
-      app_collector_image: ${{ steps.images.outputs.app_collector_image }}
 
     steps:
       - name: Checkout
@@ -50,18 +47,14 @@ jobs:
             docker push "${DOCKERHUB_NAMESPACE}/drrk-app-collector:${IMAGE_TAG}"
           fi
 
-      - name: Publish image names
-        id: images
-        run: |
-          echo "app_main_image=${DOCKERHUB_NAMESPACE}/drrk-app-main:${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
-          echo "app_collector_image=${DOCKERHUB_NAMESPACE}/drrk-app-collector:${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
-
   deploy-main:
     name: Deploy Main EC2
     runs-on: ubuntu-latest
     needs: build-push
     if: ${{ github.event.inputs.target == 'both' || github.event.inputs.target == 'main' }}
     environment: main
+    env:
+      APP_MAIN_IMAGE: ${{ vars.DOCKERHUB_NAMESPACE }}/drrk-app-main:${{ github.sha }}
 
     steps:
       - name: Configure AWS credentials
@@ -87,7 +80,7 @@ jobs:
                 "previous_image=$(grep '^APP_MAIN_IMAGE=' /opt/drrk/env/main.env | cut -d= -f2-)",
                 "rollback() { sudo sed -i -E \"s|^APP_MAIN_IMAGE=.*|APP_MAIN_IMAGE=${previous_image}|\" /opt/drrk/env/main.env; docker compose --env-file /opt/drrk/env/main.env -f /opt/drrk/main/compose.yml up -d --no-deps app-main; }",
                 "trap rollback ERR",
-                "sudo sed -i.bak -E 's|^APP_MAIN_IMAGE=.*|APP_MAIN_IMAGE=${{ needs.build-push.outputs.app_main_image }}|' /opt/drrk/env/main.env",
+                "sudo sed -i.bak -E 's|^APP_MAIN_IMAGE=.*|APP_MAIN_IMAGE=${{ env.APP_MAIN_IMAGE }}|' /opt/drrk/env/main.env",
                 "docker compose --env-file /opt/drrk/env/main.env -f /opt/drrk/main/compose.yml pull app-main",
                 "docker compose --env-file /opt/drrk/env/main.env -f /opt/drrk/main/compose.yml up -d redis",
                 "docker compose --env-file /opt/drrk/env/main.env -f /opt/drrk/main/compose.yml up -d --no-deps app-main",
@@ -112,6 +105,8 @@ jobs:
     needs: build-push
     if: ${{ github.event.inputs.target == 'both' || github.event.inputs.target == 'collector' }}
     environment: collector
+    env:
+      APP_COLLECTOR_IMAGE: ${{ vars.DOCKERHUB_NAMESPACE }}/drrk-app-collector:${{ github.sha }}
 
     steps:
       - name: Configure AWS credentials
@@ -137,7 +132,7 @@ jobs:
                 "previous_image=$(grep '^APP_COLLECTOR_IMAGE=' /opt/drrk/env/collector.env | cut -d= -f2-)",
                 "rollback() { sudo sed -i -E \"s|^APP_COLLECTOR_IMAGE=.*|APP_COLLECTOR_IMAGE=${previous_image}|\" /opt/drrk/env/collector.env; docker compose --env-file /opt/drrk/env/collector.env -f /opt/drrk/collector/compose.yml up -d --no-deps app-collector; }",
                 "trap rollback ERR",
-                "sudo sed -i.bak -E 's|^APP_COLLECTOR_IMAGE=.*|APP_COLLECTOR_IMAGE=${{ needs.build-push.outputs.app_collector_image }}|' /opt/drrk/env/collector.env",
+                "sudo sed -i.bak -E 's|^APP_COLLECTOR_IMAGE=.*|APP_COLLECTOR_IMAGE=${{ env.APP_COLLECTOR_IMAGE }}|' /opt/drrk/env/collector.env",
                 "docker compose --env-file /opt/drrk/env/collector.env -f /opt/drrk/collector/compose.yml pull app-collector",
                 "docker compose --env-file /opt/drrk/env/collector.env -f /opt/drrk/collector/compose.yml up -d rabbitmq",
                 "docker compose --env-file /opt/drrk/env/collector.env -f /opt/drrk/collector/compose.yml up -d --no-deps app-collector",
