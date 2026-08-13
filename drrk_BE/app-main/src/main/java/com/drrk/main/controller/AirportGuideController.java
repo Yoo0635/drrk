@@ -1,7 +1,7 @@
 package com.drrk.main.controller;
 
 import com.drrk.main.service.AirportGuideService;
-import com.drrk.main.service.RouteRecommendationResponse;
+import com.drrk.main.service.PlatformCongestionResponse;
 import com.drrk.messaging.congestion.RailroadArrivalResult;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
@@ -19,9 +19,9 @@ public class AirportGuideController {
 		this.service = service;
 	}
 
-	@GetMapping("/routes/recommendation")
-	public ResponseEntity<RouteRecommendationResponse> routeRecommendation() {
-		return service.routeRecommendation()
+	@GetMapping({"/platform/congestion", "/routes/recommendation"})
+	public ResponseEntity<PlatformCongestionResponse> platformCongestion() {
+		return service.platformCongestion()
 				.map(ResponseEntity::ok)
 				.orElseGet(() -> ResponseEntity.noContent().build());
 	}

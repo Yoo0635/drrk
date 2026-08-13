@@ -21,6 +21,7 @@ public record RailroadOperationApiResponse(Response response) {
 			String stnCd,
 			String planArrvDttm,
 			String accomArrvDttm,
+			String planDptrDttm,
 			String accomDptrDttm,
 			@JsonAlias("trnClsNm") String trnClsfNm
 	) {

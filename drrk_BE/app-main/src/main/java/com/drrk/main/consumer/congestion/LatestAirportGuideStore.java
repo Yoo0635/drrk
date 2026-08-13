@@ -22,10 +22,10 @@ public class LatestAirportGuideStore implements CongestionResultHandler {
 					: current
 			);
 			if (stored == message) {
-				log.info("[AIRPORT GUIDE UPDATED] calculatedAt={} version={} recommendedRoute={} trainCount={}",
+				log.info("[AIRPORT GUIDE UPDATED] calculatedAt={} version={} score={} trainCount={}",
 						message.calculatedAt(),
 						message.calculationVersion(),
-						message.recommendedRoute(),
+						message.score(),
 						message.railroadArrivals().size());
 			}
 		}

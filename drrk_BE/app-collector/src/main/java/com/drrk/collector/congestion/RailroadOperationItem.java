@@ -5,7 +5,8 @@ public record RailroadOperationItem(
 		String stationCode,
 		String scheduledArrivalTime,
 		String actualArrivalTime,
-		String departureTime,
+		String plannedDepartureTime,
+		String actualDepartureTime,
 		String trainType
 ) {
 	public RailroadOperationItem(
@@ -15,10 +16,10 @@ public record RailroadOperationItem(
 			String actualArrivalTime,
 			String trainType
 	) {
-		this(trainNumber, stationCode, scheduledArrivalTime, actualArrivalTime, null, trainType);
+		this(trainNumber, stationCode, scheduledArrivalTime, actualArrivalTime, null, null, trainType);
 	}
 
 	public RailroadOperationItem(String trainNumber, String departureTime, String arrivalTime) {
-		this(trainNumber, null, departureTime, arrivalTime, null, null);
+		this(trainNumber, null, departureTime, arrivalTime, null, null, null);
 	}
 }

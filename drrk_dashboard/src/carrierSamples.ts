@@ -3,19 +3,41 @@ import type { CarrierCountSnapshot } from "./types/inference";
 export const CARRIER_SAMPLE_COUNT = 30;
 
 export interface CongestionSample {
-  spaceId: string;
   value: 0 | 1;
   timestamp: number;
 }
 
+export interface ScoreSample {
+  score: number;
+  level: string;
+  timestamp: number;
+}
+
 export function carrierSnapshotToSample({
-  spaceId,
   carrierCount,
   receivedAt,
-}: Pick<CarrierCountSnapshot, "spaceId" | "carrierCount" | "receivedAt">): CongestionSample {
+}: Pick<CarrierCountSnapshot, "carrierCount" | "receivedAt">): CongestionSample {
   return {
-    spaceId: spaceId.trim(),
     value: carrierCount > 0 ? 1 : 0,
+    timestamp: receivedAt.getTime(),
+  };
+}
+
+export function carrierSnapshotToScoreSample({
+  congestionScore,
+  congestionLevel,
+  receivedAt,
+}: Pick<
+  CarrierCountSnapshot,
+  "congestionScore" | "congestionLevel" | "receivedAt"
+>): ScoreSample | null {
+  if (congestionScore === null || congestionLevel === null) {
+    return null;
+  }
+
+  return {
+    score: congestionScore,
+    level: congestionLevel,
     timestamp: receivedAt.getTime(),
   };
 }
@@ -32,14 +54,31 @@ export function pushCarrierSample(
   return [...samples, sample].slice(-limit);
 }
 
-export function samplesToSpaceIdRows(samples: CongestionSample[]): string[] {
-  return samples.map((sample) => sample.spaceId);
+export function pushScoreSample(
+  samples: ScoreSample[],
+  sample: ScoreSample,
+  limit = CARRIER_SAMPLE_COUNT,
+): ScoreSample[] {
+  if (!isValidScoreSample(sample)) {
+    return samples;
+  }
+
+  return [...samples, sample].slice(-limit);
 }
 
 function isValidCongestionSample(sample: CongestionSample) {
   return (
-    sample.spaceId.trim().length > 0 &&
     (sample.value === 0 || sample.value === 1) &&
+    Number.isFinite(sample.timestamp)
+  );
+}
+
+function isValidScoreSample(sample: ScoreSample) {
+  return (
+    Number.isFinite(sample.score) &&
+    sample.score >= 0 &&
+    sample.score <= 1 &&
+    sample.level.trim().length > 0 &&
     Number.isFinite(sample.timestamp)
   );
 }

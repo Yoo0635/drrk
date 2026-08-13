@@ -27,7 +27,7 @@ class InferenceWindowListenerTest {
 
 		listener.consume(amqpMessage(MESSAGE_ID, validJson(), 7L), channel);
 
-		assertEquals(MESSAGE_ID, store.snapshot().modelMeasurement().messageId());
+		assertEquals(MESSAGE_ID, latestMessageId(store));
 		verify(channel).basicAck(7L, false);
 		verify(channel, never()).basicReject(7L, false);
 	}
@@ -40,7 +40,7 @@ class InferenceWindowListenerTest {
 
 		listener.consume(amqpMessage("0f37c542-1fc9-4d50-9f1c-53ebda7edc4c", jsonWithoutMessageId(), 10L), channel);
 
-		assertEquals("0f37c542-1fc9-4d50-9f1c-53ebda7edc4c", store.snapshot().modelMeasurement().messageId());
+		assertEquals("0f37c542-1fc9-4d50-9f1c-53ebda7edc4c", latestMessageId(store));
 		verify(channel).basicAck(10L, false);
 		verify(channel, never()).basicReject(10L, false);
 	}
@@ -53,7 +53,7 @@ class InferenceWindowListenerTest {
 
 		listener.consume(amqpMessage(MODEL_MESSAGE_ID, jsonWithoutMessageId(), 11L), channel);
 
-		assertEquals(MODEL_MESSAGE_ID, store.snapshot().modelMeasurement().messageId());
+		assertEquals(MODEL_MESSAGE_ID, latestMessageId(store));
 		verify(channel).basicAck(11L, false);
 		verify(channel, never()).basicReject(11L, false);
 	}
@@ -119,5 +119,9 @@ class InferenceWindowListenerTest {
 				  "n_carriers": 3
 				}
 				""";
+	}
+
+	private String latestMessageId(LatestCongestionInputStore store) {
+		return store.snapshot().modelMeasurements().get(store.snapshot().modelMeasurements().size() - 1).messageId();
 	}
 }

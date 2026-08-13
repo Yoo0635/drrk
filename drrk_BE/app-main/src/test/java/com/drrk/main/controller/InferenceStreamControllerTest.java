@@ -2,6 +2,7 @@ package com.drrk.main.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.drrk.main.consumer.congestion.LatestAirportGuideStore;
 import com.drrk.main.consumer.inference.InferenceSseBroadcaster;
 import com.drrk.main.consumer.inference.LatestInferenceSnapshot;
 import com.drrk.main.consumer.inference.LatestInferenceSnapshotStore;
@@ -25,6 +26,7 @@ class InferenceStreamControllerTest {
 		store = new LatestInferenceSnapshotStore();
 		InferenceSseBroadcaster broadcaster = new InferenceSseBroadcaster(
 				store,
+				new LatestAirportGuideStore(),
 				new ObjectMapper(),
 				Duration.ofMinutes(30)
 		);

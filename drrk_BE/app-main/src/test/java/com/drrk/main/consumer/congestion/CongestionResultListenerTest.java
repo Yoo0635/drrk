@@ -92,13 +92,18 @@ class CongestionResultListenerTest {
 		return """
 				{
 				  "messageId": "8c530c6c-f819-4ad6-b687-760dc698c617",
-				  "schemaVersion": "3.0",
+				  "schemaVersion": "4.0",
 				  "calculatedAt": "2026-08-13T03:00:00Z",
-				  "calculationVersion": "formula-pending-v0",
+				  "calculationVersion": "formula-pending-v1",
 				  "status": "FORMULA_PENDING",
 				  "sensorDetected": false,
 				  "score": null,
 				  "level": null,
+				  "currentLoad": null,
+				  "capacity": null,
+				  "forecastLoad": null,
+				  "projectedScore": null,
+				  "lastTrainDepartureAt": null,
 				  "inputs": {
 				    "arrivalStatusCollectedAt": "2026-08-13T02:59:00Z",
 				    "arrivalStatusItemCount": 2,
@@ -108,7 +113,8 @@ class CongestionResultListenerTest {
 				    "railroadOperationItemCount": 3,
 				    "modelMessageId": "468c59d4-3b22-44e1-91ed-67b6290fa4a9",
 				    "modelMeasuredAt": "2026-08-13T02:59:50Z"
-				  }
+				  },
+				  "railroadArrivals": []
 				}
 				""";
 	}

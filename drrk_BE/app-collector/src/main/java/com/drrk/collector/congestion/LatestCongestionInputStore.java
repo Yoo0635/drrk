@@ -1,8 +1,12 @@
 package com.drrk.collector.congestion;
 
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.List;
+import java.util.ArrayList;
 
 public class LatestCongestionInputStore {
+
+	private static final int MAX_MEASUREMENT_HISTORY = 256;
 
 	private final String acceptedSensorSpaceId;
 	private final AtomicReference<CongestionInputState> state =
@@ -34,11 +38,19 @@ public class LatestCongestionInputStore {
 		}
 		while (true) {
 			CongestionInputState current = state.get();
-			ModelMeasurementSnapshot existing = current.modelMeasurement();
+			List<ModelMeasurementSnapshot> existingMeasurements = current.modelMeasurements();
+			ModelMeasurementSnapshot existing = existingMeasurements.isEmpty()
+					? null
+					: existingMeasurements.get(existingMeasurements.size() - 1);
 			if (existing != null && !snapshot.measuredAt().isAfter(existing.measuredAt())) {
 				return false;
 			}
-			if (state.compareAndSet(current, current.withModelMeasurement(snapshot))) {
+			List<ModelMeasurementSnapshot> updated = new ArrayList<>(existingMeasurements);
+			updated.add(snapshot);
+			if (updated.size() > MAX_MEASUREMENT_HISTORY) {
+				updated = new ArrayList<>(updated.subList(updated.size() - MAX_MEASUREMENT_HISTORY, updated.size()));
+			}
+			if (state.compareAndSet(current, current.withModelMeasurements(updated))) {
 				return true;
 			}
 		}
