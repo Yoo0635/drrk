@@ -148,7 +148,7 @@ class AirportResponseMapperTest {
 		assertEquals(
 				List.of(
 						new RailroadOperationItem(
-								"A2135", "077", "20260814154700", null, "20260814154730", "Comm"
+								"A2135", "077", "20260814154700", null, "20260814154730", "20260814154730", "Comm"
 						)
 				),
 				snapshot.items()
