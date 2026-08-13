@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.drrk.messaging.congestion.CongestionCalculatedMessage;
 import com.drrk.messaging.congestion.CongestionCalculationStatus;
+import com.drrk.messaging.congestion.RouteStatus;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.ObjectMapper;
@@ -14,7 +15,7 @@ class CongestionCalculatedMessageParserTest {
 	private final CongestionCalculatedMessageParser parser = new CongestionCalculatedMessageParser(new ObjectMapper());
 
 	@Test
-	void parsesValidFormulaPendingMessage() {
+	void parsesValidSchemaThreeFormulaPendingMessage() {
 		CongestionCalculatedMessage message = parser.parse(validJson());
 
 		assertThat(message.messageId()).isEqualTo("8c530c6c-f819-4ad6-b687-760dc698c617");
@@ -26,21 +27,60 @@ class CongestionCalculatedMessageParserTest {
 
 	@Test
 	void rejectsUnsupportedSchemaVersion() {
-		String invalid = validJson().replace("\"schemaVersion\": \"2.0\"", "\"schemaVersion\": \"1.0\"");
+		String invalid = validJson().replace("\"schemaVersion\": \"3.0\"", "\"schemaVersion\": \"2.0\"");
 
 		assertThatThrownBy(() -> parser.parse(invalid))
 				.isInstanceOf(InvalidCongestionMessageException.class);
 	}
 
 	@Test
-	void parsesCalculatedRouteAndRailroadGuide() {
+	void parsesCalculatedMessageWithEachRouteAndDetectedSensorStatus() {
 		CongestionCalculatedMessage message = parser.parse(calculatedJson());
 
-		assertThat(message.recommendedRoute()).hasToString("B");
-		assertThat(message.routeResults()).hasSize(2);
+		assertThat(message.recommendedRoute()).hasToString("C");
+		assertThat(message.sensorDetected()).isTrue();
+		assertThat(message.routeResults()).hasSize(3)
+				.extracting(result -> result.status())
+				.containsExactly(RouteStatus.CLEAR, RouteStatus.CONGESTED, RouteStatus.CLEAR);
 		assertThat(message.railroadArrivals()).singleElement()
 				.extracting(arrival -> arrival.status().name())
 				.isEqualTo("SCHEDULED");
+	}
+
+	@Test
+	void rejectsCalculatedMessageWithoutEachOfRoutesAThroughC() {
+		String invalid = calculatedJson().replace("\"route\":\"A\"", "\"route\":\"B\"");
+
+		assertThatThrownBy(() -> parser.parse(invalid))
+				.isInstanceOf(InvalidCongestionMessageException.class);
+	}
+
+	@Test
+	void rejectsCalculatedMessageWhenSensorStatusDoesNotMatchRoutes() {
+		String undetectedWithCongestedB = calculatedJson()
+				.replace("\"sensorDetected\": true", "\"sensorDetected\": false");
+		String detectedWithClearB = calculatedJson()
+				.replaceFirst("\"status\":\"CONGESTED\"", "\"status\":\"CLEAR\"");
+
+		assertThatThrownBy(() -> parser.parse(undetectedWithCongestedB))
+				.isInstanceOf(InvalidCongestionMessageException.class);
+		assertThatThrownBy(() -> parser.parse(detectedWithClearB))
+				.isInstanceOf(InvalidCongestionMessageException.class);
+	}
+
+	@Test
+	void rejectsDetectedMessageWhenRouteAOrCIsCongested() {
+		String detectedWithCongestedA = calculatedJson()
+				.replaceFirst("\"status\":\"CLEAR\"", "\"status\":\"CONGESTED\"");
+		String detectedWithCongestedC = calculatedJson().replaceFirst(
+				"(\"route\":\"C\"[^}]*\"status\":)\"CLEAR\"",
+				"$1\"CONGESTED\""
+		);
+
+		assertThatThrownBy(() -> parser.parse(detectedWithCongestedA))
+				.isInstanceOf(InvalidCongestionMessageException.class);
+		assertThatThrownBy(() -> parser.parse(detectedWithCongestedC))
+				.isInstanceOf(InvalidCongestionMessageException.class);
 	}
 
 	@Test
@@ -52,16 +92,19 @@ class CongestionCalculatedMessageParserTest {
 	}
 
 	@Test
-	void rejectsCalculatedMessageWithInconsistentFormulaOrRecommendation() {
+	void rejectsCalculatedMessageWithInconsistentFormulaOrNonShortestRecommendation() {
 		String invalidLoad = calculatedJson().replace("\"load\":3", "\"load\":4");
-		String invalidRecommendation = calculatedJson().replace(
-				"\"recommendedRoute\": \"B\"",
-				"\"recommendedRoute\": \"C\""
-		);
+		String nonShortestRecommendation = calculatedJson().replace(
+				"\"recommendedRoute\": \"C\"",
+				"\"recommendedRoute\": \"B\""
+		).replace(
+				"\"score\": 1.4285714285714286",
+				"\"score\": 0.7142857142857143"
+		).replace("\"level\": \"CONGESTED\"", "\"level\": \"NORMAL\"");
 
 		assertThatThrownBy(() -> parser.parse(invalidLoad))
 				.isInstanceOf(InvalidCongestionMessageException.class);
-		assertThatThrownBy(() -> parser.parse(invalidRecommendation))
+		assertThatThrownBy(() -> parser.parse(nonShortestRecommendation))
 				.isInstanceOf(InvalidCongestionMessageException.class);
 	}
 
@@ -69,10 +112,11 @@ class CongestionCalculatedMessageParserTest {
 		return """
 				{
 				  "messageId": "8c530c6c-f819-4ad6-b687-760dc698c617",
-				  "schemaVersion": "2.0",
+				  "schemaVersion": "3.0",
 				  "calculatedAt": "2026-08-13T03:00:00Z",
 				  "calculationVersion": "formula-pending-v0",
 				  "status": "FORMULA_PENDING",
+				  "sensorDetected": false,
 				  "score": null,
 				  "level": null,
 				  "inputs": {
@@ -93,12 +137,13 @@ class CongestionCalculatedMessageParserTest {
 		return """
 				{
 				  "messageId": "8c530c6c-f819-4ad6-b687-760dc698c617",
-				  "schemaVersion": "2.0",
+				  "schemaVersion": "3.0",
 				  "calculatedAt": "2026-08-13T03:00:00Z",
 				  "calculationVersion": "moving-walkway-v1",
 				  "status": "CALCULATED",
-				  "score": 0.7142857142857143,
-				  "level": "NORMAL",
+				  "sensorDetected": true,
+				  "score": 1.4285714285714286,
+				  "level": "CONGESTED",
 				  "inputs": {
 				    "arrivalStatusCollectedAt": "2026-08-13T02:59:00Z",
 				    "arrivalStatusItemCount": 2,
@@ -110,10 +155,11 @@ class CongestionCalculatedMessageParserTest {
 				    "modelMeasuredAt": "2026-08-13T02:59:50Z"
 				  },
 				  "routeResults": [
-				    {"route":"B","walkwayArrivalTime":"2026-08-13T03:01:00Z","stay":1,"incoming":1,"residual":1,"load":3,"volumeCapacityRatio":0.7142857142857143,"congestionStatus":"NORMAL","passageTimeSeconds":20,"totalTravelTimeSeconds":80},
-				    {"route":"C","walkwayArrivalTime":"2026-08-13T03:01:10Z","stay":2,"incoming":2,"residual":2,"load":6,"volumeCapacityRatio":1.4285714285714286,"congestionStatus":"CONGESTED","passageTimeSeconds":40,"totalTravelTimeSeconds":100}
+				    {"route":"A","walkwayArrivalTime":"2026-08-13T03:01:00Z","stay":1,"incoming":1,"residual":1,"load":3,"volumeCapacityRatio":0.7142857142857143,"congestionStatus":"NORMAL","status":"CLEAR","passageTimeSeconds":422,"totalTravelTimeSeconds":509},
+				    {"route":"B","walkwayArrivalTime":"2026-08-13T03:01:10Z","stay":1,"incoming":1,"residual":1,"load":3,"volumeCapacityRatio":0.7142857142857143,"congestionStatus":"NORMAL","status":"CONGESTED","passageTimeSeconds":110,"totalTravelTimeSeconds":480},
+				    {"route":"C","walkwayArrivalTime":"2026-08-13T03:01:20Z","stay":2,"incoming":2,"residual":2,"load":6,"volumeCapacityRatio":1.4285714285714286,"congestionStatus":"CONGESTED","status":"CLEAR","passageTimeSeconds":347,"totalTravelTimeSeconds":434}
 				  ],
-				  "recommendedRoute": "B",
+				  "recommendedRoute": "C",
 				  "railroadArrivals": [
 				    {"trainNo":"1234","trainType":"일반","scheduledArrivalTime":"14:55","actualArrivalTime":null,"status":"SCHEDULED"}
 				  ]

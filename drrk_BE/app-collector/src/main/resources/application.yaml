@@ -38,20 +38,5 @@ congestion:
   moving-walkway:
     enabled: ${CONGESTION_MOVING_WALKWAY_ENABLED:false}
     sensor-space-id: ${CONGESTION_SENSOR_SPACE_ID:}
-    carriers-per-passenger: ${CONGESTION_CARRIERS_PER_PASSENGER:}
-    route-b:
-      split: ${CONGESTION_ROUTE_B_SPLIT:}
-      retention-length-seconds: ${CONGESTION_ROUTE_B_RETENTION_LENGTH_SECONDS:}
-      walkway-arrival-offset-seconds: ${CONGESTION_ROUTE_B_WALKWAY_ARRIVAL_OFFSET_SECONDS:}
-      available-passage-time-seconds: ${CONGESTION_ROUTE_B_AVAILABLE_PASSAGE_TIME_SECONDS:}
-      congested-passage-time-seconds: ${CONGESTION_ROUTE_B_CONGESTED_PASSAGE_TIME_SECONDS:}
-      remaining-travel-time-seconds: ${CONGESTION_ROUTE_B_REMAINING_TRAVEL_TIME_SECONDS:}
-    route-c:
-      split: ${CONGESTION_ROUTE_C_SPLIT:}
-      retention-length-seconds: ${CONGESTION_ROUTE_C_RETENTION_LENGTH_SECONDS:}
-      walkway-arrival-offset-seconds: ${CONGESTION_ROUTE_C_WALKWAY_ARRIVAL_OFFSET_SECONDS:}
-      available-passage-time-seconds: ${CONGESTION_ROUTE_C_AVAILABLE_PASSAGE_TIME_SECONDS:}
-      congested-passage-time-seconds: ${CONGESTION_ROUTE_C_CONGESTED_PASSAGE_TIME_SECONDS:}
-      remaining-travel-time-seconds: ${CONGESTION_ROUTE_C_REMAINING_TRAVEL_TIME_SECONDS:}
   publisher:
     confirm-timeout: ${CONGESTION_PUBLISH_CONFIRM_TIMEOUT:PT2S}

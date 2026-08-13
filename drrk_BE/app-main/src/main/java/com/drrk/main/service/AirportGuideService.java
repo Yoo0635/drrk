@@ -19,6 +19,7 @@ public class AirportGuideService {
 		return store.latest().map(message -> new RouteRecommendationResponse(
 				message.recommendedRoute(),
 				message.calculatedAt(),
+				message.sensorDetected(),
 				message.routeResults()
 		));
 	}

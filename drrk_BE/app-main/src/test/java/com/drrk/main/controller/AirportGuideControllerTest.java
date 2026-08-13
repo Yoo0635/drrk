@@ -14,6 +14,7 @@ import com.drrk.messaging.congestion.MovingWalkwayStatus;
 import com.drrk.messaging.congestion.RailroadArrivalResult;
 import com.drrk.messaging.congestion.RailroadArrivalStatus;
 import com.drrk.messaging.congestion.RouteCongestionResult;
+import com.drrk.messaging.congestion.RouteStatus;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -45,15 +46,23 @@ class AirportGuideControllerTest {
 	}
 
 	@Test
-	void returnsRecommendationAndRouteArrivalCongestion() throws Exception {
+	void returnsDetectedSensorRecommendationWithAllRouteStatusesAndTimes() throws Exception {
 		store.handle(calculatedMessage());
 
 		mockMvc.perform(get("/api/v1/routes/recommendation"))
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.recommendedRoute").value("B"))
-				.andExpect(jsonPath("$.routes[0].route").value("B"))
-				.andExpect(jsonPath("$.routes[0].congestionStatus").value("NORMAL"))
-				.andExpect(jsonPath("$.routes[0].totalTravelTimeSeconds").value(80));
+				.andExpect(jsonPath("$.recommendedRoute").value("C"))
+				.andExpect(jsonPath("$.sensorDetected").value(true))
+				.andExpect(jsonPath("$.calculatedAt").value("2026-08-13T05:00:00Z"))
+				.andExpect(jsonPath("$.routes[0].route").value("A"))
+				.andExpect(jsonPath("$.routes[0].status").value("CLEAR"))
+				.andExpect(jsonPath("$.routes[0].totalTravelTimeSeconds").value(509))
+				.andExpect(jsonPath("$.routes[1].route").value("B"))
+				.andExpect(jsonPath("$.routes[1].status").value("CONGESTED"))
+				.andExpect(jsonPath("$.routes[1].totalTravelTimeSeconds").value(480))
+				.andExpect(jsonPath("$.routes[2].route").value("C"))
+				.andExpect(jsonPath("$.routes[2].status").value("CLEAR"))
+				.andExpect(jsonPath("$.routes[2].totalTravelTimeSeconds").value(434));
 	}
 
 	@Test
@@ -70,47 +79,55 @@ class AirportGuideControllerTest {
 	}
 
 	private CongestionCalculatedMessage calculatedMessage() {
-		RouteCongestionResult routeB = new RouteCongestionResult(
-				AirportRoute.B,
-				Instant.parse("2026-08-13T05:00:30Z"),
-				1,
-				1,
-				1,
-				3,
-				3 / 4.2,
-				MovingWalkwayStatus.NORMAL,
-				20,
-				80
-		);
-		RouteCongestionResult routeC = new RouteCongestionResult(
-				AirportRoute.C,
-				Instant.parse("2026-08-13T05:00:40Z"),
-				2,
-				2,
-				2,
-				6,
-				6 / 4.2,
-				MovingWalkwayStatus.CONGESTED,
-				40,
-				100
-		);
 		return CongestionCalculatedMessage.calculated(
 				UUID.fromString("35c9ef91-9f68-4fda-833f-90fa54c25816"),
 				Instant.parse("2026-08-13T05:00:00Z"),
 				"moving-walkway-v1",
-				List.of(routeB, routeC),
-				AirportRoute.B,
+				true,
+				List.of(
+						route(AirportRoute.A, 3, MovingWalkwayStatus.NORMAL, RouteStatus.CLEAR, 422, 509),
+						route(AirportRoute.B, 3, MovingWalkwayStatus.NORMAL, RouteStatus.CONGESTED, 110, 480),
+						route(AirportRoute.C, 6, MovingWalkwayStatus.CONGESTED, RouteStatus.CLEAR, 347, 434)
+				),
+				AirportRoute.C,
 				List.of(new RailroadArrivalResult("1234", "일반", "14:55", null, RailroadArrivalStatus.SCHEDULED)),
-				new CongestionInputReferences(
-						Instant.EPOCH,
-						1,
-						Instant.EPOCH,
-						1,
-						Instant.EPOCH,
-						1,
-						"8c530c6c-f819-4ad6-b687-760dc698c617",
-						Instant.EPOCH
-				)
+				inputs()
+		);
+	}
+
+	private RouteCongestionResult route(
+			AirportRoute route,
+			double load,
+			MovingWalkwayStatus congestionStatus,
+			RouteStatus status,
+			long passageTimeSeconds,
+			long totalTravelTimeSeconds
+	) {
+		return new RouteCongestionResult(
+				route,
+				Instant.parse("2026-08-13T05:00:30Z"),
+				load / 3,
+				load / 3,
+				load / 3,
+				load,
+				load / 4.2,
+				congestionStatus,
+				status,
+				passageTimeSeconds,
+				totalTravelTimeSeconds
+		);
+	}
+
+	private CongestionInputReferences inputs() {
+		return new CongestionInputReferences(
+				Instant.EPOCH,
+				1,
+				Instant.EPOCH,
+				1,
+				Instant.EPOCH,
+				1,
+				"8c530c6c-f819-4ad6-b687-760dc698c617",
+				Instant.EPOCH
 		);
 	}
 }

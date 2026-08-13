@@ -11,6 +11,7 @@ public record CongestionCalculatedMessage(
 		Instant calculatedAt,
 		String calculationVersion,
 		CongestionCalculationStatus status,
+		boolean sensorDetected,
 		Double score,
 		String level,
 		CongestionInputReferences inputs,
@@ -29,9 +30,11 @@ public record CongestionCalculatedMessage(
 		routeResults = routeResults == null ? List.of() : List.copyOf(routeResults);
 		railroadArrivals = railroadArrivals == null ? List.of() : List.copyOf(railroadArrivals);
 		if (status == CongestionCalculationStatus.CALCULATED) {
-			if (routeResults.isEmpty() || recommendedRoute == null
+			if (recommendedRoute == null || routeResults.size() != AirportRoute.values().length
+					|| !routeResults.stream().map(RouteCongestionResult::route).toList()
+							.containsAll(List.of(AirportRoute.values()))
 					|| routeResults.stream().noneMatch(result -> result.route() == recommendedRoute)) {
-				throw new IllegalArgumentException("Calculated result must contain the recommended route");
+				throw new IllegalArgumentException("Calculated result must contain each airport route exactly once and the recommended route");
 			}
 		}
 	}
@@ -43,10 +46,11 @@ public record CongestionCalculatedMessage(
 	) {
 		return new CongestionCalculatedMessage(
 				messageId.toString(),
-				"2.0",
+				"3.0",
 				calculatedAt,
 				"formula-pending-v0",
 				CongestionCalculationStatus.FORMULA_PENDING,
+				false,
 				null,
 				null,
 				inputs,
@@ -60,6 +64,7 @@ public record CongestionCalculatedMessage(
 			UUID messageId,
 			Instant calculatedAt,
 			String calculationVersion,
+			boolean sensorDetected,
 			List<RouteCongestionResult> routeResults,
 			AirportRoute recommendedRoute,
 			List<RailroadArrivalResult> railroadArrivals,
@@ -72,10 +77,11 @@ public record CongestionCalculatedMessage(
 				.orElseThrow(() -> new IllegalArgumentException("Recommended route must be present in routeResults"));
 		return new CongestionCalculatedMessage(
 				messageId.toString(),
-				"2.0",
+				"3.0",
 				calculatedAt,
 				calculationVersion,
 				CongestionCalculationStatus.CALCULATED,
+				sensorDetected,
 				recommended.volumeCapacityRatio(),
 				recommended.congestionStatus().name(),
 				inputs,

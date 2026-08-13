@@ -12,6 +12,7 @@ public record RouteCongestionResult(
 		double load,
 		double volumeCapacityRatio,
 		MovingWalkwayStatus congestionStatus,
+		RouteStatus status,
 		long passageTimeSeconds,
 		long totalTravelTimeSeconds
 ) {
@@ -23,6 +24,7 @@ public record RouteCongestionResult(
 		Objects.requireNonNull(route, "route");
 		Objects.requireNonNull(walkwayArrivalTime, "walkwayArrivalTime");
 		Objects.requireNonNull(congestionStatus, "congestionStatus");
+		Objects.requireNonNull(status, "status");
 		requireNonNegativeFinite(stay, "stay");
 		requireNonNegativeFinite(incoming, "incoming");
 		requireNonNegativeFinite(residual, "residual");
