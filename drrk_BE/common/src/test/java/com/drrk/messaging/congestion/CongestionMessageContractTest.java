@@ -184,10 +184,11 @@ class CongestionMessageContractTest {
 	@Test
 	void exposesStableRabbitNames() {
 		assertEquals("drrk.congestion.exchange", CongestionRabbitNames.EXCHANGE);
-		assertEquals("congestion.snapshot.v2", CongestionRabbitNames.ROUTING_KEY);
-		assertEquals("drrk.main.congestion.snapshot.v2", CongestionRabbitNames.MAIN_QUEUE);
+		assertEquals("congestion.snapshot.v3", CongestionRabbitNames.ROUTING_KEY);
+		assertEquals("drrk.main.congestion.snapshot.v3", CongestionRabbitNames.MAIN_QUEUE);
 		assertEquals("drrk.congestion.dlx", CongestionRabbitNames.DEAD_LETTER_EXCHANGE);
-		assertEquals("drrk.main.congestion.snapshot.v2.dlq", CongestionRabbitNames.DEAD_LETTER_QUEUE);
+		assertEquals("congestion.snapshot.dead.v3", CongestionRabbitNames.DEAD_LETTER_ROUTING_KEY);
+		assertEquals("drrk.main.congestion.snapshot.v3.dlq", CongestionRabbitNames.DEAD_LETTER_QUEUE);
 	}
 
 	private CongestionInputReferences inputs() {
