@@ -1,65 +1,72 @@
 import type { MapMarkerData } from "../types/marker";
 
+/**
+ * 지도 위 마커 좌표.
+ * x/y는 airport-map.png 기준 퍼센트 좌표다.
+ */
 export const MARKERS: MapMarkerData[] = [
-  { id: "current", type: "current", x: 62, y: 8.5, label: "현재 위치" },
-
-  // 무빙워크 — 혼잡도
   {
-    id: "walk-1",
+    id: "current",
+    x: 60.0,
+    y: 10.8,
+    type: "current",
+    label: "현재 위치",
+    detail: "인천공항 T1 · 도착층",
+  },
+  {
+    id: "moving-a",
+    x: 23.5,
+    y: 10.0,
     type: "movingwalk",
-    x: 25,
-    y: 37,
+    status: "normal",
+    detail: "A 무빙워크",
+  },
+  {
+    id: "moving-b",
+    x: 59.8,
+    y: 18.0,
+    type: "movingwalk",
+    status: "normal",
+    detail: "B 무빙워크",
+  },
+  {
+    id: "moving-c",
+    x: 88.0,
+    y: 27.0,
+    type: "movingwalk",
+    status: "busy",
+    detail: "C 무빙워크",
+  },
+  {
+    id: "moving-common-free",
+    x: 23.5,
+    y: 40.5,
+    type: "movingwalk",
     status: "free",
-    detail: "캐리어 21대/10분",
+    detail: "공통 무빙워크",
   },
   {
-    id: "walk-2",
+    id: "moving-common-busy",
+    x: 50.5,
+    y: 40.5,
     type: "movingwalk",
-    x: 53,
-    y: 37,
     status: "busy",
-    detail: "캐리어 132대/10분",
+    detail: "공통 무빙워크",
   },
-  {
-    id: "walk-3",
-    type: "movingwalk",
-    x: 91,
-    y: 26,
-    status: "busy",
-    detail: "캐리어 132대/10분",
-  },
-  {
-    id: "walk-4",
-    type: "movingwalk",
-    x: 63,
-    y: 15,
-    status: "normal",
-    detail: "캐리어 48대/10분",
-  },
-  {
-    id: "walk-5",
-    type: "movingwalk",
-    x: 25,
-    y: 7,
-    status: "normal",
-    detail: "캐리어 48대/10분",
-  },
-
-  // 공항철도
   {
     id: "rail-express",
-    label: "공항철도 직행",
+    x: 10.5,
+    y: 95.0,
     type: "rail",
-    x: 13,
-    y: 95,
-    detail: "다음 열차 19:20",
+    label: "공항철도 직행",
+    detail: "공항철도 직행",
   },
   {
-    id: "rail-local",
-    label: "공항철도 일반",
+    id: "rail-all-stop",
+    x: 34.0,
+    y: 96.0,
     type: "rail",
-    x: 37,
-    y: 95,
-    detail: "다음 열차 19:20",
+    label: "공항철도 일반",
+    detail: "공항철도 일반",
   },
 ];
