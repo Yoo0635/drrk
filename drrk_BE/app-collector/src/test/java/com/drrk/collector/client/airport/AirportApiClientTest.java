@@ -101,7 +101,7 @@ class AirportApiClientTest {
 
 	private String railroadJson() {
 		return """
-				{"response":{"header":{"resultCode":"00","resultMsg":"NORMAL SERVICE."},"body":{"items":[{"trnNo":"A2002","stnCd":"110","planArrvDttm":"20260813050800","accomArrvDttm":"","trnClsNm":"AREX"}]}}}
+				{"response":{"header":{"resultCode":"00","resultMsg":"NORMAL SERVICE."},"body":{"items":[{"trnNo":"A2002","stnCd":"110","accomArrvDttm":"20260813090800","accomDptrDttm":"20260813090900","trnClsfNm":"AREX"}]}}}
 				""";
 	}
 }

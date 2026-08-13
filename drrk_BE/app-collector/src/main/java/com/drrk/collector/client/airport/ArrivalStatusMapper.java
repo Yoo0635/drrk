@@ -3,9 +3,7 @@ package com.drrk.collector.client.airport;
 import com.drrk.collector.congestion.ArrivalStatusItem;
 import com.drrk.collector.congestion.ArrivalStatusSnapshot;
 import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -13,8 +11,7 @@ import java.util.Optional;
 
 public class ArrivalStatusMapper {
 
-	private static final DateTimeFormatter MINUTE_FORMAT = DateTimeFormatter.ofPattern("yyyyMMddHHmm");
-	private static final DateTimeFormatter SECOND_FORMAT = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
+	private static final int MAX_UPCOMING_ITEMS = 5;
 
 	public ArrivalStatusSnapshot map(ArrivalStatusApiResponse apiResponse, Instant collectedAt) {
 		apiResponse.response().header().requireSuccess();
@@ -29,6 +26,10 @@ public class ArrivalStatusMapper {
 				.filter(this::isTerminalOneGateBOrC)
 				.map(this::mapItem)
 				.flatMap(Optional::stream)
+				.filter(candidate -> !candidate.arrivalTime().isBefore(collectedAt))
+				.sorted(Comparator.comparing(ArrivalCandidate::arrivalTime))
+				.limit(MAX_UPCOMING_ITEMS)
+				.map(ArrivalCandidate::item)
 				.toList();
 		return new ArrivalStatusSnapshot(collectedAt, selected);
 	}
@@ -39,10 +40,11 @@ public class ArrivalStatusMapper {
 				&& ("B".equalsIgnoreCase(entryGate) || "C".equalsIgnoreCase(entryGate));
 	}
 
-	private Optional<ArrivalStatusItem> mapItem(ArrivalStatusApiResponse.Item item) {
+	private Optional<ArrivalCandidate> mapItem(ArrivalStatusApiResponse.Item item) {
 		String flightId = normalize(item.flightid());
-		String effectiveArrivalTime = firstText(item.estimatedtime(), item.scheduletime());
-		if (flightId.isBlank() || effectiveArrivalTime == null || !isAirportDateTime(effectiveArrivalTime)) {
+		String estimatedArrivalTime = normalize(item.estimatedtime());
+		Optional<Instant> arrivalTime = AirportDateTimeParser.parse(estimatedArrivalTime);
+		if (flightId.isBlank() || arrivalTime.isEmpty()) {
 			return Optional.empty();
 		}
 		Integer koreanPassengerCount = parseNonNegativeInteger(item.korean());
@@ -50,30 +52,16 @@ public class ArrivalStatusMapper {
 		if (koreanPassengerCount == null || foreignPassengerCount == null) {
 			return Optional.empty();
 		}
-		return Optional.of(new ArrivalStatusItem(
-				normalize(item.entrygate()).toUpperCase(Locale.ROOT),
-				flightId,
-				effectiveArrivalTime,
-				koreanPassengerCount,
-				foreignPassengerCount
+		return Optional.of(new ArrivalCandidate(
+				new ArrivalStatusItem(
+						normalize(item.entrygate()).toUpperCase(Locale.ROOT),
+						flightId,
+						estimatedArrivalTime,
+						koreanPassengerCount,
+						foreignPassengerCount
+				),
+				arrivalTime.orElseThrow()
 		));
-	}
-
-	private boolean isAirportDateTime(String value) {
-		String digits = value.replaceAll("[^0-9]", "");
-		try {
-			if (digits.length() == 12) {
-				LocalDateTime.parse(digits, MINUTE_FORMAT);
-				return true;
-			}
-			if (digits.length() == 14) {
-				LocalDateTime.parse(digits, SECOND_FORMAT);
-				return true;
-			}
-			return false;
-		} catch (DateTimeParseException exception) {
-			return false;
-		}
 	}
 
 	private Integer parseNonNegativeInteger(String value) {
@@ -88,19 +76,10 @@ public class ArrivalStatusMapper {
 		}
 	}
 
-	private String firstText(String first, String second) {
-		String normalizedFirst = normalize(first);
-		if (!normalizedFirst.isBlank()) {
-			return normalizedFirst;
-		}
-		String normalizedSecond = normalize(second);
-		if (!normalizedSecond.isBlank()) {
-			return normalizedSecond;
-		}
-		return null;
-	}
-
 	private String normalize(String value) {
 		return value == null ? "" : value.trim();
+	}
+
+	private record ArrivalCandidate(ArrivalStatusItem item, Instant arrivalTime) {
 	}
 }
