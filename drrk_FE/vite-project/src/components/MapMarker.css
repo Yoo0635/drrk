@@ -1,84 +1,108 @@
+/* ============================================================
+   마커 원칙
+   - 알약(pill)은 "누를 수 있다"는 신호. 지도 위 모든 마커에 적용.
+   - 마커 배경은 항상 반투명 흰색 + 블러(프로스티드).
+     지도의 크림색 배경 위에서 어떤 상태든 동일하게 읽힌다.
+   - 혼잡도는 배경이 아니라 '점 하나'로만 표현한다.
+     배경까지 물들이면 지도가 색 덩어리로 뒤덮인다.
+   ============================================================ */
 .map-marker {
   position: absolute;
   transform: translate(-50%, -50%); /* left/top이 마커의 '중심'이 되도록 보정 */
-  display: flex;
+
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
+  gap: 7px;
+
+  padding: 7px 13px;
   margin: 0;
-  background: rgba(255, 255, 255, 0.94);
-  border: 1px solid #e5e7eb;
-  border-radius: 999px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  font-family: inherit;             /* button은 폰트를 상속하지 않는다 */
-  font-size: clamp(11px, 0.85vw, 15px);
+
+  background: var(--frosted);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-pill);
+
+  font-family: inherit;
+  font-size: clamp(12px, 0.82vw, 15px);
   font-weight: 600;
   line-height: 1;
-  color: #1f2937;
+  letter-spacing: -0.01em;
+  color: var(--ink);
   white-space: nowrap;
+
   cursor: pointer;
-  transition: transform 0.15s, box-shadow 0.15s;
+  transition: transform 0.18s ease, border-color 0.18s ease;
 }
 
-.map-marker:hover {
-  /* transform 재지정 시 translate를 반드시 함께 적어야 위치가 유지된다 */
-  transform: translate(-50%, -50%) scale(1.06);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.16);
+/* 시스템 전반의 프레스 인터랙션 */
+.map-marker:active {
+  transform: translate(-50%, -50%) scale(0.95);
 }
 
 .map-marker:focus-visible {
-  outline: 2px solid #2563eb;
-  outline-offset: 2px;
+  outline: 2px solid var(--primary-focus);
+  outline-offset: 3px;
 }
 
 .map-marker.is-selected {
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.25);
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(11, 94, 215, 0.18);
 }
 
 .map-marker__icon {
   display: flex;
-  color: #6b7280;
+  color: var(--ink-muted);
 }
 
 .map-marker__icon svg {
-  width: 16px;
-  height: 16px;
+  width: 15px;
+  height: 15px;
 }
 
-/* ── 혼잡도 3단계 ── */
-.map-marker--free {
-  background: #ecfdf5;
-  border-color: #6ee7b7;
-  color: #047857;
+/* ── 혼잡도: 아이콘 대신 상태 점만 색을 갖는다 ────────────── */
+.map-marker--movingwalk .map-marker__icon::after {
+  content: "";
+  display: block;
+  width: 8px;
+  height: 8px;
+  margin-left: 5px;
+  border-radius: 50%;
+  background: currentcolor;
 }
-.map-marker--free .map-marker__icon { color: #059669; }
 
-.map-marker--normal {
-  background: #eff6ff;
-  border-color: #93c5fd;
-  color: #1d4ed8;
+.map-marker--free   { color: var(--status-free); }
+.map-marker--normal { color: var(--status-normal); }
+.map-marker--busy   { color: var(--status-busy); }
+
+.map-marker--free   .map-marker__icon,
+.map-marker--normal .map-marker__icon,
+.map-marker--busy   .map-marker__icon {
+  color: inherit;   /* 점과 라벨이 같은 색을 갖도록 */
 }
-.map-marker--normal .map-marker__icon { color: #2563eb; }
 
-.map-marker--busy {
-  background: #fef2f2;
-  border-color: #fca5a5;
-  color: #b91c1c;
-}
-.map-marker--busy .map-marker__icon { color: #dc2626; }
-
-/* ── 현재 위치는 눈에 띄게 ── */
+/* ── 현재 위치: 유일하게 프라이머리를 입는 마커 ───────────── */
 .map-marker--current {
-  background: #1d4ed8;
-  border-color: #1d4ed8;
-  color: #ffffff;
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--on-primary);
 }
-.map-marker--current .map-marker__icon { color: #ffffff; }
+
+.map-marker--current .map-marker__icon {
+  color: var(--on-primary);
+}
+
+/* ── 공항철도: 목적지이므로 잉크색으로 차분하게 ───────────── */
+.map-marker--rail {
+  color: var(--ink);
+}
 
 /* 화면이 좁으면 라벨을 숨기고 아이콘만 남긴다 */
 @media (max-width: 700px) {
   .map-marker {
-    padding: 6px;
+    padding: 7px;
+    gap: 4px;
   }
 
   .map-marker__label {

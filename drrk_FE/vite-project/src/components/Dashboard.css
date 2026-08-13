@@ -1,0 +1,152 @@
+/* ============================================================
+   대시보드
+   카드 테두리·그림자를 쓰지 않는다. 세로 헤어라인 하나로만 나눈다.
+   좌우 패딩은 헤더(--space-lg)와 같은 값이라 시선이 한 축으로 정렬된다.
+   ============================================================ */
+.dashboard {
+  width: 100%;
+  min-height: 260px;
+
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+
+  padding: var(--space-xl) 0;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+
+  padding: 0 var(--space-lg);
+  border-right: 1px solid var(--hairline);
+}
+
+.panel:last-child {
+  border-right: none;
+}
+
+.panel__title {
+  margin: 0 0 var(--space-md);
+
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--ink-muted);
+}
+
+.panel__caption {
+  margin: 0;
+  font-size: 14px;
+  color: var(--ink-muted);
+}
+
+.panel__headline {
+  margin: 2px 0 var(--space-sm);
+
+  font-size: 40px;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.022em;   /* 큰 글자일수록 자간을 더 조인다 */
+  color: var(--ink);
+}
+
+/* ── 라벨 + 값 한 줄 ─────────────────────────────────────── */
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-xs);
+
+  padding: 8px 0;
+  font-size: 15px;
+}
+
+.row__label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink);
+}
+
+.row__value {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* 시스템이 추천하는 값에만 프라이머리를 쓴다 */
+.row__value.is-primary {
+  color: var(--primary);
+}
+
+.tag {
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--primary);
+  background: rgba(11, 94, 215, 0.10);
+}
+
+/* ── 혼잡도 표시 ─────────────────────────────────────────── */
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+
+  font-weight: 600;
+}
+
+.status__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentcolor;
+}
+
+.status--free   { color: var(--status-free); }
+.status--normal { color: var(--status-normal); }
+.status--busy   { color: var(--status-busy); }
+
+/* ── 배지 ────────────────────────────────────────────────── */
+.badge {
+  align-self: flex-start;
+  padding: 5px 12px;
+  border-radius: var(--radius-pill);
+
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.badge--free   { color: var(--status-free);   background: rgba(4, 120, 87, 0.10); }
+.badge--normal { color: var(--status-normal); background: rgba(180, 83, 9, 0.10); }
+.badge--busy   { color: var(--status-busy);   background: rgba(192, 57, 47, 0.10); }
+
+/* ── 반응형 ──────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .dashboard {
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-xl) 0;
+  }
+
+  .panel:nth-child(2n) {
+    border-right: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .dashboard {
+    grid-template-columns: 1fr;
+    padding: var(--space-lg) 0;
+  }
+
+  .panel {
+    padding: 0 var(--space-md);
+    border-right: none;
+  }
+
+  .panel__headline {
+    font-size: 34px;
+  }
+}

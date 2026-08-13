@@ -1,34 +1,29 @@
 import { useState } from "react";
+import Header from "./components/Header";
 import AirportMap from "./components/AirportMap";
-import DetailPanel from "./components/DetailPanel";
+import Dashboard from "./components/Dashboard";
 import { MARKERS } from "./data/markers";
 import "./App.css";
 
-function App() {
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const selected = MARKERS.find((m) => m.id === selectedId) ?? null;
-
-  /** 같은 마커를 다시 누르면 선택 해제 */
-  function handleSelect(id: string) {
-    setSelectedId((prev) => (prev === id ? null : id));
-  }
+export default function App() {
+  const [selectedMarkerId, setSelectedMarkerId] = useState<string | null>(null);
 
   return (
     <main className="page">
+      <Header updatedAt="14:28" />
+
       <section className="top-area">
         <AirportMap
           markers={MARKERS}
-          selectedId={selectedId}
-          onSelect={handleSelect}
-          coordPicker
+          selectedId={selectedMarkerId}
+          onSelect={setSelectedMarkerId}
+          coordPicker={false}
         />
       </section>
 
       <section className="bottom-area">
-        <DetailPanel marker={selected} />
+        <Dashboard />
       </section>
     </main>
   );
 }
-
-export default App;

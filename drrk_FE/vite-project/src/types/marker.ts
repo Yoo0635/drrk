@@ -17,9 +17,14 @@ export interface MapMarkerData {
   detail?: string;
 }
 
+/**
+ * 혼잡도 라벨
+ * '원활'을 '보통'으로 바꿨다. 여유·원활은 의미가 겹쳐 3단계 구분이
+ * 흐려지고, 색(초록–노랑–빨강)과도 대응이 어긋나기 때문이다.
+ */
 export const STATUS_LABEL: Record<MarkerStatus, string> = {
   free: "여유",
-  normal: "원활",
+  normal: "보통",
   busy: "혼잡",
 };
 
