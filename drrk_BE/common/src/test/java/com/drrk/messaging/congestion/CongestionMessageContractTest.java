@@ -154,27 +154,35 @@ class CongestionMessageContractTest {
 	}
 
 	@Test
-	void rejectsCalculatedResultsThatDoNotContainAllAirportRoutes() {
-		RouteCongestionResult routeB = new RouteCongestionResult(
-				AirportRoute.B,
-				Instant.EPOCH,
-				0,
-				0,
-				0,
-				0,
-				0,
-				MovingWalkwayStatus.AVAILABLE,
-				RouteStatus.CLEAR,
-				1,
-				1
-		);
+	void rejectsCalculatedResultsWhenRecommendedRouteIsMissing() {
+		RouteCongestionResult routeA = route(AirportRoute.A);
+		RouteCongestionResult routeC = route(AirportRoute.C);
 
 		assertThrows(IllegalArgumentException.class, () -> CongestionCalculatedMessage.calculated(
 				UUID.randomUUID(),
 				Instant.EPOCH,
 				"moving-walkway-v1",
 				false,
-				List.of(routeB),
+				List.of(routeA, routeC),
+				AirportRoute.B,
+				List.of(),
+				inputs()
+		));
+	}
+
+	@Test
+	void rejectsCalculatedResultsWithDuplicateAirportRoute() {
+		RouteCongestionResult routeA = route(AirportRoute.A);
+		RouteCongestionResult routeB = route(AirportRoute.B);
+		RouteCongestionResult duplicateRouteB = route(AirportRoute.B);
+		RouteCongestionResult routeC = route(AirportRoute.C);
+
+		assertThrows(IllegalArgumentException.class, () -> CongestionCalculatedMessage.calculated(
+				UUID.randomUUID(),
+				Instant.EPOCH,
+				"moving-walkway-v1",
+				false,
+				List.of(routeA, routeB, duplicateRouteB, routeC),
 				AirportRoute.B,
 				List.of(),
 				inputs()
@@ -201,6 +209,22 @@ class CongestionMessageContractTest {
 				4,
 				"8c530c6c-f819-4ad6-b687-760dc698c617",
 				Instant.parse("2026-08-13T00:00:03Z")
+		);
+	}
+
+	private RouteCongestionResult route(AirportRoute route) {
+		return new RouteCongestionResult(
+				route,
+				Instant.EPOCH,
+				0,
+				0,
+				0,
+				0,
+				0,
+				MovingWalkwayStatus.AVAILABLE,
+				RouteStatus.CLEAR,
+				1,
+				1
 		);
 	}
 }
