@@ -46,7 +46,8 @@ public class RailroadOperationMapper {
 	private Optional<RailroadCandidate> mapItem(RailroadOperationApiResponse.Item item) {
 		String trainNumber = normalize(item.trnNo());
 		String stationCode = normalize(item.stnCd());
-		String arrivalTimeText = normalize(item.accomArrvDttm());
+		String arrivalTimeText = fallbackTime(item.accomArrvDttm(), item.planArrvDttm());
+		String departureTimeText = fallbackTime(item.accomDptrDttm(), item.planDptrDttm());
 
 		// Validate identity fields are not blank
 		if (trainNumber.isBlank() || stationCode.isBlank()) {
@@ -64,11 +65,19 @@ public class RailroadOperationMapper {
 						arrivalTimeText,
 						null,
 						normalizeBlankToNull(item.planDptrDttm()),
-						normalizeBlankToNull(item.accomDptrDttm()),
+						normalizeBlankToNull(departureTimeText),
 						normalize(item.trnClsfNm())
 				),
 				arrivalTime.orElseThrow()
 		));
+	}
+
+	private String fallbackTime(String primary, String fallback) {
+		String normalizedPrimary = normalize(primary);
+		if (!normalizedPrimary.isBlank()) {
+			return normalizedPrimary;
+		}
+		return normalize(fallback);
 	}
 
 	private String normalizeBlankToNull(String value) {

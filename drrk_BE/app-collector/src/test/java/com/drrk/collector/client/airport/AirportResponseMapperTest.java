@@ -131,6 +131,31 @@ class AirportResponseMapperTest {
 	}
 
 	@Test
+	void railroadMapperFallsBackToPlannedTimesWhenActualTimesAreBlank() throws Exception {
+		RailroadOperationApiResponse response = objectMapper.readValue("""
+				{
+				  "response": {
+				    "header": {"resultCode": "00", "resultMsg": "NORMAL SERVICE."},
+				    "body": {"items": [
+				      {"trnNo": "A2135", "stnCd": "077", "planArrvDttm": "20260814154700", "planDptrDttm": "20260814154730", "accomArrvDttm": "", "accomDptrDttm": "", "trnClsfNm": "Comm"}
+				    ]}
+				  }
+				}
+				""", RailroadOperationApiResponse.class);
+
+		RailroadOperationSnapshot snapshot = new RailroadOperationMapper().map(response, collectedAt);
+
+		assertEquals(
+				List.of(
+						new RailroadOperationItem(
+								"A2135", "077", "20260814154700", null, "20260814154730", "Comm"
+						)
+				),
+				snapshot.items()
+		);
+	}
+
+	@Test
 	void railroadMapperKeepsCurrentAndNextFiveTrainsOrderedByArrivalTime() throws Exception {
 		RailroadOperationApiResponse response = objectMapper.readValue("""
 				{
