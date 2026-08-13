@@ -9,7 +9,7 @@ services:
       RABBITMQ_ERLANG_COOKIE: ${RABBITMQ_ERLANG_COOKIE:?RABBITMQ_ERLANG_COOKIE is required}
     ports:
       - "${RABBITMQ_PRIVATE_BIND_IP:?RABBITMQ_PRIVATE_BIND_IP is required}:5672:5672"
-      - "5671:5671"
+      - "${RABBITMQ_PRIVATE_BIND_IP}:5671:5671"
       - "127.0.0.1:15672:15672"
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
