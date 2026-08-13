@@ -92,9 +92,7 @@ public class MovingWalkwayCongestionCalculator implements CongestionCalculator {
 		double residual = route.split() * inflowPerSecond * delta;
 		double load = stay + incoming + residual;
 		double volumeCapacityRatio = load / CAPACITY;
-		MovingWalkwayStatus status = volumeCapacityRatio > 1d
-				? MovingWalkwayStatus.CONGESTED
-				: MovingWalkwayStatus.AVAILABLE;
+		MovingWalkwayStatus status = MovingWalkwayStatus.fromVolumeCapacityRatio(volumeCapacityRatio);
 		long passageTime = status == MovingWalkwayStatus.CONGESTED
 				? route.congestedPassageTimeSeconds()
 				: route.availablePassageTimeSeconds();

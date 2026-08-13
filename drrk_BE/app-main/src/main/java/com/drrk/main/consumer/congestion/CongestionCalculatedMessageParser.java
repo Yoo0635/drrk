@@ -78,9 +78,9 @@ public class CongestionCalculatedMessageParser {
 					|| !nearlyEqual(result.volumeCapacityRatio(), result.load() / CAPACITY)) {
 				throw new InvalidCongestionMessageException("Route congestion formula is inconsistent");
 			}
-			MovingWalkwayStatus expected = result.volumeCapacityRatio() > 1d
-					? MovingWalkwayStatus.CONGESTED
-					: MovingWalkwayStatus.AVAILABLE;
+			MovingWalkwayStatus expected = MovingWalkwayStatus.fromVolumeCapacityRatio(
+					result.volumeCapacityRatio()
+			);
 			if (result.congestionStatus() != expected) {
 				throw new InvalidCongestionMessageException("Route congestion status does not match v/c");
 			}

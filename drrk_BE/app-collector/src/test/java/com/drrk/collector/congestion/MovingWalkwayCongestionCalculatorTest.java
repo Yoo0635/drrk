@@ -48,13 +48,13 @@ class MovingWalkwayCongestionCalculatorTest {
 
 		RouteCongestionResult routeC = result.routeResults().get(1);
 		assertEquals(3.83, routeC.load(), 1.0e-9);
-		assertEquals(MovingWalkwayStatus.AVAILABLE, routeC.congestionStatus());
+		assertEquals(MovingWalkwayStatus.NORMAL, routeC.congestionStatus());
 		assertEquals(70, routeC.totalTravelTimeSeconds());
 		assertEquals(AirportRoute.C, result.recommendedRoute());
 	}
 
 	@Test
-	void treatsVolumeCapacityRatioEqualToOneAsAvailable() {
+	void treatsVolumeCapacityRatioEqualToOneAsNormalWithAvailablePassageTime() {
 		MovingWalkwayCongestionCalculator calculator = calculator(
 				new MovingWalkwayRouteDefinition(AirportRoute.B, 1.0, 10, 10, 7, 9, 0),
 				new MovingWalkwayRouteDefinition(AirportRoute.C, 1.0, 10, 10, 7, 9, 0)
@@ -70,7 +70,8 @@ class MovingWalkwayCongestionCalculatorTest {
 		RouteCongestionResult routeB = result.routeResults().get(0);
 		assertEquals(4.2, routeB.load(), 1.0e-9);
 		assertEquals(1.0, routeB.volumeCapacityRatio(), 1.0e-9);
-		assertEquals(MovingWalkwayStatus.AVAILABLE, routeB.congestionStatus());
+		assertEquals(MovingWalkwayStatus.NORMAL, routeB.congestionStatus());
+		assertEquals(7, routeB.passageTimeSeconds());
 		assertEquals(AirportRoute.B, result.recommendedRoute());
 	}
 

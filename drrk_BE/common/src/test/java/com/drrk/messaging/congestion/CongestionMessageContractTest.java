@@ -67,7 +67,7 @@ class CongestionMessageContractTest {
 				0.5,
 				3.5,
 				3.5 / 4.2,
-				MovingWalkwayStatus.AVAILABLE,
+				MovingWalkwayStatus.NORMAL,
 				20,
 				80
 		);
@@ -107,7 +107,25 @@ class CongestionMessageContractTest {
 		assertEquals(AirportRoute.B, message.recommendedRoute());
 		assertEquals(List.of(train), message.railroadArrivals());
 		assertEquals(routeB.volumeCapacityRatio(), message.score());
-		assertEquals("AVAILABLE", message.level());
+		assertEquals("NORMAL", message.level());
+	}
+
+	@Test
+	void acceptsNormalStatusForRatioAbovePointSevenThroughOne() {
+		RouteCongestionResult result = new RouteCongestionResult(
+				AirportRoute.B,
+				Instant.EPOCH,
+				1.0,
+				2.0,
+				0.36,
+				3.36,
+				0.8,
+				MovingWalkwayStatus.NORMAL,
+				20,
+				80
+		);
+
+		assertEquals(MovingWalkwayStatus.NORMAL, result.congestionStatus());
 	}
 
 	@Test

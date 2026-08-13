@@ -43,9 +43,7 @@ public record RouteCongestionResult(
 					"volumeCapacityRatio must equal load / " + CAPACITY + " (expected " + expectedRatio + ", got " + volumeCapacityRatio + ")"
 			);
 		}
-		MovingWalkwayStatus expectedStatus = volumeCapacityRatio > 1.0
-				? MovingWalkwayStatus.CONGESTED
-				: MovingWalkwayStatus.AVAILABLE;
+		MovingWalkwayStatus expectedStatus = MovingWalkwayStatus.fromVolumeCapacityRatio(volumeCapacityRatio);
 		if (congestionStatus != expectedStatus) {
 			throw new IllegalArgumentException(
 					"congestionStatus must match volumeCapacityRatio (expected " + expectedStatus + " for ratio " + volumeCapacityRatio + ", got " + congestionStatus + ")"

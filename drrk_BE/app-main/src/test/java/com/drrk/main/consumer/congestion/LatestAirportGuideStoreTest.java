@@ -42,7 +42,7 @@ class LatestAirportGuideStoreTest {
 				1,
 				3,
 				3 / 4.2,
-				MovingWalkwayStatus.AVAILABLE,
+				MovingWalkwayStatus.NORMAL,
 				10,
 				50
 		);
