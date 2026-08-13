@@ -32,6 +32,7 @@ class InferenceStreamControllerTest {
 					new ObjectMapper(),
 					Clock.fixed(Instant.parse("2026-08-13T05:00:04Z"), ZoneOffset.UTC),
 					Duration.ofSeconds(5),
+					Duration.ofSeconds(25),
 					Duration.ofMinutes(30)
 			);
 		controller = new InferenceStreamController(broadcaster);

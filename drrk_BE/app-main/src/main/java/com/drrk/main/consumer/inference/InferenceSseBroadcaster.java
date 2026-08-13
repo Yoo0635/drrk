@@ -29,6 +29,7 @@ public class InferenceSseBroadcaster {
 	private final ObjectMapper objectMapper;
 	private final Clock clock;
 	private final Duration snapshotMaxAge;
+	private final Duration congestionMaxAge;
 	private final Duration emitterTimeout;
 	private final Set<SseEmitter> emitters = ConcurrentHashMap.newKeySet();
 
@@ -39,6 +40,7 @@ public class InferenceSseBroadcaster {
 			ObjectMapper objectMapper,
 			Clock clock,
 			@Value("${inference.stream.snapshot-max-age:PT5S}") Duration snapshotMaxAge,
+			@Value("${inference.stream.congestion-max-age:PT25S}") Duration congestionMaxAge,
 			@Value("${inference.stream.emitter-timeout:PT30M}") Duration emitterTimeout
 	) {
 		this.store = store;
@@ -46,6 +48,7 @@ public class InferenceSseBroadcaster {
 		this.objectMapper = objectMapper;
 		this.clock = clock;
 		this.snapshotMaxAge = snapshotMaxAge;
+		this.congestionMaxAge = congestionMaxAge;
 		this.emitterTimeout = emitterTimeout;
 	}
 
@@ -54,9 +57,10 @@ public class InferenceSseBroadcaster {
 			LatestAirportGuideStore airportGuideStore,
 			Clock clock,
 			Duration snapshotMaxAge,
+			Duration congestionMaxAge,
 			Duration emitterTimeout
 	) {
-		this(store, airportGuideStore, new ObjectMapper(), clock, snapshotMaxAge, emitterTimeout);
+		this(store, airportGuideStore, new ObjectMapper(), clock, snapshotMaxAge, congestionMaxAge, emitterTimeout);
 	}
 
 	public SseEmitter subscribe() {
@@ -121,7 +125,7 @@ public class InferenceSseBroadcaster {
 	}
 
 	private String toJson(LatestInferenceSnapshot snapshot) {
-		var latestGuide = airportGuideStore.latestFresh(now(), snapshotMaxAge).orElse(null);
+		var latestGuide = airportGuideStore.latestFresh(now(), congestionMaxAge).orElse(null);
 		try {
 			return objectMapper.writeValueAsString(
 					new CarrierCountStreamResponse(

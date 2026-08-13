@@ -13,16 +13,7 @@ class CongestionMessageContractTest {
 
 	@Test
 	void createsFormulaPendingMessageWithTraceableInputSnapshots() {
-		CongestionInputReferences inputs = new CongestionInputReferences(
-				Instant.parse("2026-08-13T00:00:00Z"),
-				2,
-				Instant.parse("2026-08-13T00:00:01Z"),
-				3,
-				Instant.parse("2026-08-13T00:00:02Z"),
-				4,
-				"8c530c6c-f819-4ad6-b687-760dc698c617",
-				Instant.parse("2026-08-13T00:00:03Z")
-		);
+		CongestionInputReferences inputs = inputs();
 
 		CongestionCalculatedMessage message = CongestionCalculatedMessage.formulaPending(
 				UUID.fromString("35c9ef91-9f68-4fda-833f-90fa54c25816"),
@@ -31,7 +22,7 @@ class CongestionMessageContractTest {
 		);
 
 		assertEquals("35c9ef91-9f68-4fda-833f-90fa54c25816", message.messageId());
-		assertEquals("4.0", message.schemaVersion());
+		assertEquals("5.0", message.schemaVersion());
 		assertEquals("formula-pending-v1", message.calculationVersion());
 		assertEquals(CongestionCalculationStatus.FORMULA_PENDING, message.status());
 		assertEquals(false, message.sensorDetected());
@@ -43,6 +34,21 @@ class CongestionMessageContractTest {
 		assertNull(message.projectedScore());
 		assertNull(message.lastTrainDepartureAt());
 		assertEquals(inputs, message.inputs());
+	}
+
+	@Test
+	void createsNoServiceMessageWhenTrainScheduleIsUnavailable() {
+		CongestionCalculatedMessage message = CongestionCalculatedMessage.noService(
+				UUID.fromString("35c9ef91-9f68-4fda-833f-90fa54c25816"),
+				Instant.parse("2026-08-13T00:00:10Z"),
+				inputs()
+		);
+
+		assertEquals("5.0", message.schemaVersion());
+		assertEquals("platform-congestion-v2", message.calculationVersion());
+		assertEquals(CongestionCalculationStatus.NO_SERVICE, message.status());
+		assertNull(message.score());
+		assertNull(message.level());
 	}
 
 	@Test
@@ -63,7 +69,7 @@ class CongestionMessageContractTest {
 	}
 
 	@Test
-	void createsCalculatedGuideWithLoadCapacityAndRailroadArrivals() {
+	void createsCalculatedGuideWithCombinedWindowScore() {
 		CongestionInputReferences inputs = inputs();
 		RailroadArrivalResult train = new RailroadArrivalResult(
 				"1234",
@@ -76,7 +82,7 @@ class CongestionMessageContractTest {
 		CongestionCalculatedMessage message = CongestionCalculatedMessage.calculated(
 				UUID.fromString("35c9ef91-9f68-4fda-833f-90fa54c25816"),
 				Instant.parse("2026-08-13T05:00:00Z"),
-				"platform-congestion-v1",
+				"platform-congestion-v2",
 				true,
 				24.0,
 				48L,
@@ -86,25 +92,45 @@ class CongestionMessageContractTest {
 				inputs
 		);
 
-		assertEquals("4.0", message.schemaVersion());
+		assertEquals("5.0", message.schemaVersion());
 		assertEquals(CongestionCalculationStatus.CALCULATED, message.status());
 		assertEquals(true, message.sensorDetected());
-		assertEquals(24.0 / 48.0, message.score());
+		assertEquals((24.0 + 8.5) / 48.0, message.score());
 		assertEquals("MEDIUM", message.level());
 		assertEquals(24.0, message.currentLoad());
 		assertEquals(48L, message.capacity());
 		assertEquals(8.5, message.forecastLoad());
-		assertEquals((24.0 + 8.5) / 48.0, message.projectedScore());
+		assertEquals(message.score(), message.projectedScore());
 		assertEquals(Instant.parse("2026-08-13T04:55:00Z"), message.lastTrainDepartureAt());
 		assertEquals(List.of(train), message.railroadArrivals());
 	}
 
 	@Test
-	void clampsProjectedScoreAtOne() {
+	void createsNoFlightDataGuideWithMeasuredOnlyScore() {
+		CongestionCalculatedMessage message = CongestionCalculatedMessage.noFlightData(
+				UUID.fromString("35c9ef91-9f68-4fda-833f-90fa54c25816"),
+				Instant.parse("2026-08-13T05:00:00Z"),
+				"platform-congestion-v2",
+				true,
+				24.0,
+				48L,
+				0.0,
+				Instant.parse("2026-08-13T04:55:00Z"),
+				List.of(),
+				inputs()
+		);
+
+		assertEquals(CongestionCalculationStatus.NO_FLIGHT_DATA, message.status());
+		assertEquals(0.5, message.score());
+		assertEquals("MEDIUM", message.level());
+	}
+
+	@Test
+	void clampsScoreAtOne() {
 		CongestionCalculatedMessage message = CongestionCalculatedMessage.calculated(
 				UUID.randomUUID(),
 				Instant.parse("2026-08-13T05:00:00Z"),
-				"platform-congestion-v1",
+				"platform-congestion-v2",
 				true,
 				60.0,
 				48L,
@@ -124,7 +150,7 @@ class CongestionMessageContractTest {
 		assertThrows(IllegalArgumentException.class, () -> CongestionCalculatedMessage.calculated(
 				UUID.randomUUID(),
 				Instant.EPOCH,
-				"platform-congestion-v1",
+				"platform-congestion-v2",
 				false,
 				10.0,
 				0L,
@@ -136,7 +162,7 @@ class CongestionMessageContractTest {
 		assertThrows(IllegalArgumentException.class, () -> CongestionCalculatedMessage.calculated(
 				UUID.randomUUID(),
 				Instant.EPOCH,
-				"platform-congestion-v1",
+				"platform-congestion-v2",
 				false,
 				10.0,
 				48L,
@@ -144,6 +170,27 @@ class CongestionMessageContractTest {
 				null,
 				List.of(),
 				inputs()
+		));
+	}
+
+	@Test
+	void rejectsCalculatedMessageWhoseScoreIgnoresForecastLoad() {
+		assertThrows(IllegalArgumentException.class, () -> new CongestionCalculatedMessage(
+				"35c9ef91-9f68-4fda-833f-90fa54c25816",
+				"5.0",
+				Instant.parse("2026-08-13T05:00:00Z"),
+				"platform-congestion-v2",
+				CongestionCalculationStatus.CALCULATED,
+				true,
+				0.5,
+				"MEDIUM",
+				inputs(),
+				24.0,
+				48L,
+				8.5,
+				0.5,
+				Instant.parse("2026-08-13T04:55:00Z"),
+				List.of()
 		));
 	}
 

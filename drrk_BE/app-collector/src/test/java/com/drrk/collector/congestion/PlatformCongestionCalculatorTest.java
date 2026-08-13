@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.drrk.messaging.congestion.CongestionCalculatedMessage;
+import com.drrk.messaging.congestion.CongestionCalculationStatus;
 import com.drrk.messaging.congestion.RailroadArrivalStatus;
 import java.time.Clock;
 import java.time.Instant;
@@ -12,30 +13,28 @@ import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
+/**
+ * v2 공식: 누적 창 (T_prev, T_next], 실측층 + 예보층(α·B·φ), C = min(1, L / L_cap).
+ * 모든 시각은 KST(UTC+9) 2026-08-13 기준. NOW = 14:00 KST = 05:00Z.
+ */
 class PlatformCongestionCalculatorTest {
 
 	private static final Instant NOW = Instant.parse("2026-08-13T05:00:00Z");
 	private static final UUID MESSAGE_ID = UUID.fromString("35c9ef91-9f68-4fda-833f-90fa54c25816");
 
 	@Test
-	void calculatesCurrentAndProjectedPlatformCongestionFromSensorHistoryAndFlightForecast() {
-		PlatformCongestionCalculator calculator = new PlatformCongestionCalculator(
-				Clock.fixed(NOW, ZoneOffset.UTC),
-				() -> MESSAGE_ID,
-				properties()
-		);
-
-		CongestionCalculatedMessage result = calculator.calculate(new CongestionInputs(
+	void coversWholeWindowWithMeasurementsWhenNextTrainArrivesWithinWalkTime() {
+		// T_prev = 13:55, T_next = 14:05, w = 10분 → 센서 창 (13:45, 13:55], 예보층 불필요
+		CongestionCalculatedMessage result = calculator().calculate(new CongestionInputs(
 				new ArrivalStatusSnapshot(NOW.minusSeconds(60), List.of(
-						new ArrivalStatusItem("B", "KE001", "202608131410", 100, 50),
-						new ArrivalStatusItem("C", "KE002", "202608131500", 30, 20)
+						new ArrivalStatusItem("B", "KE001", "202608131310", 120, 46)
 				)),
 				new PassengerForecastSnapshot(NOW.minusSeconds(60), List.of(
 						new PassengerForecastItem("20260813", "14_15", 300)
 				)),
 				new RailroadOperationSnapshot(NOW.minusSeconds(60), List.of(
 						new RailroadOperationItem("A0900", "110", "20260813135500", null, "20260813135500", "20260813135500", "일반"),
-						new RailroadOperationItem("A0901", "110", "20260813140500", null, "20260813140500", "20260813140500", "일반")
+						new RailroadOperationItem("A0901", "110", "20260813140500", null, "20260813140500", null, "일반")
 				)),
 				List.of(
 						new ModelMeasurementSnapshot("m1", Instant.parse("2026-08-13T04:46:00Z"), "desk01", 60, 5),
@@ -44,14 +43,15 @@ class PlatformCongestionCalculatorTest {
 				)
 		));
 
+		assertEquals(CongestionCalculationStatus.CALCULATED, result.status());
 		assertTrue(result.sensorDetected());
-		assertEquals(12.0, result.currentLoad());
+		assertEquals(23.0, result.currentLoad());
+		assertEquals(0.0, result.forecastLoad(), 1.0e-9);
 		assertEquals(48L, result.capacity());
-		assertEquals(12.0 / 48.0, result.score(), 1.0e-9);
-		assertEquals("LOW", result.level());
+		assertEquals(23.0 / 48.0, result.score(), 1.0e-9);
+		assertEquals(result.score(), result.projectedScore(), 1.0e-9);
+		assertEquals("MEDIUM", result.level());
 		assertEquals(Instant.parse("2026-08-13T04:55:00Z"), result.lastTrainDepartureAt());
-		assertEquals(34.4, result.forecastLoad(), 1.0e-9);
-		assertEquals((12.0 + 34.4) / 48.0, result.projectedScore(), 1.0e-9);
 		assertEquals(List.of("A0900", "A0901"), result.railroadArrivals().stream()
 				.map(arrival -> arrival.trainNo())
 				.toList());
@@ -60,31 +60,144 @@ class PlatformCongestionCalculatorTest {
 	}
 
 	@Test
-	void returnsFormulaPendingWhenNoDepartedTrainExistsYet() {
-		PlatformCongestionCalculator calculator = new PlatformCongestionCalculator(
-				Clock.fixed(NOW, ZoneOffset.UTC),
-				() -> MESSAGE_ID,
-				properties()
-		);
+	void fillsUnobservedTailOfWindowWithFlightForecastLayer() {
+		// T_prev = 13:55, T_next = 14:20, w = 10분 → 실측 (13:45, 14:00], 예보 (14:00, 14:10]
+		// FRA 편(내 120/외 46, 13:10 도착): B = 120·0.09·0.75 + 46·0.22·0.95 = 17.714
+		// 출구 분포 13:55~14:40 균등 → S 질량 10/45, 14시대 질량 40/45
+		// α(14_15) = 300 / (166 · 40/45), forecast = α · 17.714 · (10/45)
+		CongestionCalculatedMessage result = calculator().calculate(new CongestionInputs(
+				new ArrivalStatusSnapshot(NOW.minusSeconds(60), List.of(
+						new ArrivalStatusItem("B", "FR123", "202608131310", 120, 46)
+				)),
+				new PassengerForecastSnapshot(NOW.minusSeconds(60), List.of(
+						new PassengerForecastItem("20260813", "14_15", 300)
+				)),
+				new RailroadOperationSnapshot(NOW.minusSeconds(60), List.of(
+						new RailroadOperationItem("A0900", "110", "20260813135500", null, "20260813135500", "20260813135500", "일반"),
+						new RailroadOperationItem("A0901", "110", "20260813142000", null, "20260813142000", null, "일반")
+				)),
+				List.of(
+						new ModelMeasurementSnapshot("m1", Instant.parse("2026-08-13T04:46:00Z"), "desk01", 60, 5),
+						new ModelMeasurementSnapshot("m2", Instant.parse("2026-08-13T04:49:00Z"), "desk01", 60, 7),
+						new ModelMeasurementSnapshot("m3", Instant.parse("2026-08-13T04:53:00Z"), "desk01", 60, 11)
+				)
+		));
 
-		CongestionCalculatedMessage result = calculator.calculate(new CongestionInputs(
+		double expectedBaggage = 120 * 0.09 * 0.75 + 46 * 0.22 * 0.95;
+		double alpha = 300.0 / (166.0 * (40.0 / 45.0));
+		double expectedForecast = alpha * expectedBaggage * (10.0 / 45.0);
+
+		assertEquals(CongestionCalculationStatus.CALCULATED, result.status());
+		assertEquals(23.0, result.currentLoad());
+		assertEquals(expectedForecast, result.forecastLoad(), 1.0e-9);
+		assertEquals(Math.min(1.0, (23.0 + expectedForecast) / 48.0), result.score(), 1.0e-9);
+		assertEquals(result.score(), result.projectedScore(), 1.0e-9);
+	}
+
+	@Test
+	void returnsNoServiceWhenNoDepartedTrainExistsYet() {
+		CongestionCalculatedMessage result = calculator().calculate(new CongestionInputs(
 				new ArrivalStatusSnapshot(NOW.minusSeconds(60), List.of()),
 				new PassengerForecastSnapshot(NOW.minusSeconds(60), List.of()),
 				new RailroadOperationSnapshot(NOW.minusSeconds(60), List.of(
-						new RailroadOperationItem("A0901", "110", "20260813140500", null, "20260813140500", "20260813140500", "일반")
+						new RailroadOperationItem("A0901", "110", "20260813140500", null, "20260813140500", null, "일반")
 				)),
 				List.of(new ModelMeasurementSnapshot("m1", Instant.parse("2026-08-13T04:49:00Z"), "desk01", 60, 7))
 		));
 
-		assertEquals("FORMULA_PENDING", result.status().name());
+		assertEquals(CongestionCalculationStatus.NO_SERVICE, result.status());
+		assertEquals("platform-congestion-v2", result.calculationVersion());
+	}
+
+	@Test
+	void returnsNoServiceWhenNoUpcomingTrainExists() {
+		// 막차 이후: 과거 열차만 존재 → T_next 미정의 → 혼잡도 미산출
+		CongestionCalculatedMessage result = calculator().calculate(new CongestionInputs(
+				new ArrivalStatusSnapshot(NOW.minusSeconds(60), List.of()),
+				new PassengerForecastSnapshot(NOW.minusSeconds(60), List.of()),
+				new RailroadOperationSnapshot(NOW.minusSeconds(60), List.of(
+						new RailroadOperationItem("A0900", "110", "20260813135500", null, "20260813135500", "20260813135500", "일반")
+				)),
+				List.of(new ModelMeasurementSnapshot("m1", Instant.parse("2026-08-13T04:49:00Z"), "desk01", 60, 7))
+		));
+
+		assertEquals(CongestionCalculationStatus.NO_SERVICE, result.status());
+	}
+
+	@Test
+	void returnsNoFlightDataWhenForecastNeededWithoutUsableFlights() {
+		// 예보 구간 (14:00, 14:10] 필요하지만 항공편 없음 → 실측층만으로 산출
+		CongestionCalculatedMessage result = calculator().calculate(new CongestionInputs(
+				new ArrivalStatusSnapshot(NOW.minusSeconds(60), List.of()),
+				new PassengerForecastSnapshot(NOW.minusSeconds(60), List.of()),
+				new RailroadOperationSnapshot(NOW.minusSeconds(60), List.of(
+						new RailroadOperationItem("A0900", "110", "20260813135500", null, "20260813135500", "20260813135500", "일반"),
+						new RailroadOperationItem("A0901", "110", "20260813142000", null, "20260813142000", null, "일반")
+				)),
+				List.of(new ModelMeasurementSnapshot("m1", Instant.parse("2026-08-13T04:53:00Z"), "desk01", 60, 11))
+		));
+
+		assertEquals(CongestionCalculationStatus.NO_FLIGHT_DATA, result.status());
+		assertEquals(11.0, result.currentLoad());
+		assertEquals(0.0, result.forecastLoad(), 1.0e-9);
+		assertEquals(11.0 / 48.0, result.score(), 1.0e-9);
+		assertEquals("LOW", result.level());
+	}
+
+	@Test
+	void matchesSpecSectionSixVerificationExample() {
+		// 문서 6절: 배차 6분, w=8분, 창당 4대×6창=24대, L_cap=48 → C=0.50
+		CongestionCalculationProperties properties = properties();
+		properties.setWalkMinutes(8);
+		PlatformCongestionCalculator calculator = new PlatformCongestionCalculator(
+				Clock.fixed(Instant.parse("2026-08-13T01:03:00Z"), ZoneOffset.UTC), // 10:03 KST
+				() -> MESSAGE_ID,
+				properties
+		);
+
+		// T_prev = 10:00, T_next = 10:06 → 센서 창 (09:52, 09:58], 실측 확정 범위 내
+		List<ModelMeasurementSnapshot> measurements = List.of(
+				new ModelMeasurementSnapshot("m1", Instant.parse("2026-08-13T00:53:00Z"), "desk01", 60, 4),
+				new ModelMeasurementSnapshot("m2", Instant.parse("2026-08-13T00:54:00Z"), "desk01", 60, 4),
+				new ModelMeasurementSnapshot("m3", Instant.parse("2026-08-13T00:55:00Z"), "desk01", 60, 4),
+				new ModelMeasurementSnapshot("m4", Instant.parse("2026-08-13T00:56:00Z"), "desk01", 60, 4),
+				new ModelMeasurementSnapshot("m5", Instant.parse("2026-08-13T00:57:00Z"), "desk01", 60, 4),
+				new ModelMeasurementSnapshot("m6", Instant.parse("2026-08-13T00:58:00Z"), "desk01", 60, 4)
+		);
+
+		CongestionCalculatedMessage result = calculator.calculate(new CongestionInputs(
+				new ArrivalStatusSnapshot(Instant.parse("2026-08-13T01:02:00Z"), List.of(
+						new ArrivalStatusItem("B", "KE001", "202608130910", 100, 50)
+				)),
+				new PassengerForecastSnapshot(Instant.parse("2026-08-13T01:02:00Z"), List.of()),
+				new RailroadOperationSnapshot(Instant.parse("2026-08-13T01:02:00Z"), List.of(
+						new RailroadOperationItem("A0900", "110", "20260813100000", null, "20260813100000", "20260813100000", "일반"),
+						new RailroadOperationItem("A0901", "110", "20260813100600", null, "20260813100600", null, "일반")
+				)),
+				measurements
+		));
+
+		assertEquals(CongestionCalculationStatus.CALCULATED, result.status());
+		assertEquals(24.0, result.currentLoad());
+		assertEquals(0.0, result.forecastLoad(), 1.0e-9);
+		assertEquals(0.5, result.score(), 1.0e-9);
+		assertEquals("MEDIUM", result.level());
+	}
+
+	private PlatformCongestionCalculator calculator() {
+		return new PlatformCongestionCalculator(
+				Clock.fixed(NOW, ZoneOffset.UTC),
+				() -> MESSAGE_ID,
+				properties()
+		);
 	}
 
 	private CongestionCalculationProperties properties() {
 		CongestionCalculationProperties properties = new CongestionCalculationProperties();
 		properties.setTrainCapacity(48);
 		properties.setWalkMinutes(10);
-		properties.setForecastLeadMinutes(43);
-		properties.setForecastDistributionMinutes(14);
+		properties.setExitDelayMinMinutes(45);
+		properties.setExitDelayMaxMinutes(90);
 		properties.setRK(0.09);
 		properties.setRF(0.22);
 		properties.setCK(0.75);

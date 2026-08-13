@@ -30,11 +30,36 @@ class LatestAirportGuideStoreTest {
 		assertEquals(newer.messageId(), store.latest().orElseThrow().messageId());
 	}
 
+	@Test
+	void ignoresNoServiceMessagesButStoresNoFlightDataResults() {
+		LatestAirportGuideStore store = new LatestAirportGuideStore();
+		Instant base = Instant.parse("2026-08-13T05:01:00Z");
+
+		store.handle(CongestionCalculatedMessage.noService(UUID.randomUUID(), base, inputs()));
+		assertTrue(store.latest().isEmpty());
+
+		CongestionCalculatedMessage measuredOnly = CongestionCalculatedMessage.noFlightData(
+				UUID.randomUUID(),
+				base.plusSeconds(1),
+				"platform-congestion-v2",
+				true,
+				12.0,
+				48L,
+				0.0,
+				base.minusSeconds(300),
+				List.of(),
+				inputs()
+		);
+		store.handle(measuredOnly);
+
+		assertEquals(measuredOnly.messageId(), store.latest().orElseThrow().messageId());
+	}
+
 	private CongestionCalculatedMessage calculatedAt(Instant calculatedAt) {
 		return CongestionCalculatedMessage.calculated(
 				UUID.randomUUID(),
 				calculatedAt,
-				"platform-congestion-v1",
+				"platform-congestion-v2",
 				false,
 				12.0,
 				48L,

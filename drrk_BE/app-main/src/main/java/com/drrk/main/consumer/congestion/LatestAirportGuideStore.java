@@ -1,7 +1,6 @@
 package com.drrk.main.consumer.congestion;
 
 import com.drrk.messaging.congestion.CongestionCalculatedMessage;
-import com.drrk.messaging.congestion.CongestionCalculationStatus;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
@@ -17,7 +16,7 @@ public class LatestAirportGuideStore implements CongestionResultHandler {
 
 	@Override
 	public void handle(CongestionCalculatedMessage message) {
-		if (message.status() == CongestionCalculationStatus.CALCULATED) {
+		if (CongestionCalculatedMessage.hasScore(message.status())) {
 			CongestionCalculatedMessage stored = latest.updateAndGet(
 					current -> current == null || message.calculatedAt().isAfter(current.calculatedAt())
 					? message

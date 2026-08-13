@@ -14,11 +14,11 @@ class CongestionCalculatedMessageParserTest {
 	private final CongestionCalculatedMessageParser parser = new CongestionCalculatedMessageParser(new ObjectMapper());
 
 	@Test
-	void parsesValidSchemaFourFormulaPendingMessage() {
-		CongestionCalculatedMessage message = parser.parse(validJson());
+	void parsesValidNoServiceMessage() {
+		CongestionCalculatedMessage message = parser.parse(noServiceJson());
 
 		assertThat(message.messageId()).isEqualTo("8c530c6c-f819-4ad6-b687-760dc698c617");
-		assertThat(message.status()).isEqualTo(CongestionCalculationStatus.FORMULA_PENDING);
+		assertThat(message.status()).isEqualTo(CongestionCalculationStatus.NO_SERVICE);
 		assertThat(message.calculatedAt()).isEqualTo(Instant.parse("2026-08-13T03:00:00Z"));
 		assertThat(message.inputs().arrivalStatusItemCount()).isEqualTo(2);
 		assertThat(message.score()).isNull();
@@ -26,9 +26,22 @@ class CongestionCalculatedMessageParserTest {
 	}
 
 	@Test
+	void parsesValidFormulaPendingMessage() {
+		CongestionCalculatedMessage message = parser.parse(
+				noServiceJson()
+						.replace("\"status\": \"NO_SERVICE\"", "\"status\": \"FORMULA_PENDING\"")
+						.replace("\"calculationVersion\": \"platform-congestion-v2\"",
+								"\"calculationVersion\": \"formula-pending-v1\"")
+		);
+
+		assertThat(message.status()).isEqualTo(CongestionCalculationStatus.FORMULA_PENDING);
+		assertThat(message.score()).isNull();
+	}
+
+	@Test
 	void acceptsNonUuidModelMessageIdFromInferencePipeline() {
 		CongestionCalculatedMessage message = parser.parse(
-				validJson().replace(
+				noServiceJson().replace(
 						"\"modelMessageId\": \"468c59d4-3b22-44e1-91ed-67b6290fa4a9\"",
 						"\"modelMessageId\": \"desk01:1786645389.4\""
 				)
@@ -39,17 +52,17 @@ class CongestionCalculatedMessageParserTest {
 
 	@Test
 	void rejectsUnsupportedSchemaVersion() {
-		String invalid = validJson().replace("\"schemaVersion\": \"4.0\"", "\"schemaVersion\": \"3.0\"");
+		String invalid = noServiceJson().replace("\"schemaVersion\": \"5.0\"", "\"schemaVersion\": \"4.0\"");
 
 		assertThatThrownBy(() -> parser.parse(invalid))
 				.isInstanceOf(InvalidCongestionMessageException.class);
 	}
 
 	@Test
-	void parsesCalculatedMessageWithCurrentAndProjectedLoad() {
+	void parsesCalculatedMessageWithCombinedWindowScore() {
 		CongestionCalculatedMessage message = parser.parse(calculatedJson());
 
-		assertThat(message.score()).isEqualTo(0.5d);
+		assertThat(message.score()).isEqualTo(0.6770833333333334d);
 		assertThat(message.level()).isEqualTo("MEDIUM");
 		assertThat(message.currentLoad()).isEqualTo(24.0d);
 		assertThat(message.capacity()).isEqualTo(48L);
@@ -62,8 +75,23 @@ class CongestionCalculatedMessageParserTest {
 	}
 
 	@Test
-	void rejectsFormulaPendingMessageWithInventedScore() {
-		String invalid = validJson().replace("\"score\": null", "\"score\": 42.0");
+	void parsesNoFlightDataMessageWithMeasuredOnlyScore() {
+		CongestionCalculatedMessage message = parser.parse(
+				calculatedJson()
+						.replace("\"status\": \"CALCULATED\"", "\"status\": \"NO_FLIGHT_DATA\"")
+						.replace("\"forecastLoad\": 8.5", "\"forecastLoad\": 0.0")
+						.replace("\"score\": 0.6770833333333334", "\"score\": 0.5")
+						.replace("\"projectedScore\": 0.6770833333333334", "\"projectedScore\": 0.5")
+		);
+
+		assertThat(message.status()).isEqualTo(CongestionCalculationStatus.NO_FLIGHT_DATA);
+		assertThat(message.score()).isEqualTo(0.5d);
+		assertThat(message.level()).isEqualTo("MEDIUM");
+	}
+
+	@Test
+	void rejectsNoServiceMessageWithInventedScore() {
+		String invalid = noServiceJson().replace("\"score\": null", "\"score\": 42.0");
 
 		assertThatThrownBy(() -> parser.parse(invalid))
 				.isInstanceOf(InvalidCongestionMessageException.class);
@@ -81,14 +109,24 @@ class CongestionCalculatedMessageParserTest {
 				.isInstanceOf(InvalidCongestionMessageException.class);
 	}
 
-	private String validJson() {
+	@Test
+	void rejectsCalculatedMessageWhoseScoreIgnoresForecastLoad() {
+		String invalid = calculatedJson()
+				.replace("\"score\": 0.6770833333333334", "\"score\": 0.5")
+				.replace("\"projectedScore\": 0.6770833333333334", "\"projectedScore\": 0.5");
+
+		assertThatThrownBy(() -> parser.parse(invalid))
+				.isInstanceOf(InvalidCongestionMessageException.class);
+	}
+
+	private String noServiceJson() {
 		return """
 				{
 				  "messageId": "8c530c6c-f819-4ad6-b687-760dc698c617",
-				  "schemaVersion": "4.0",
+				  "schemaVersion": "5.0",
 				  "calculatedAt": "2026-08-13T03:00:00Z",
-				  "calculationVersion": "formula-pending-v1",
-				  "status": "FORMULA_PENDING",
+				  "calculationVersion": "platform-congestion-v2",
+				  "status": "NO_SERVICE",
 				  "sensorDetected": false,
 				  "score": null,
 				  "level": null,
@@ -116,12 +154,12 @@ class CongestionCalculatedMessageParserTest {
 		return """
 				{
 				  "messageId": "8c530c6c-f819-4ad6-b687-760dc698c617",
-				  "schemaVersion": "4.0",
+				  "schemaVersion": "5.0",
 				  "calculatedAt": "2026-08-13T03:00:00Z",
-				  "calculationVersion": "platform-congestion-v1",
+				  "calculationVersion": "platform-congestion-v2",
 				  "status": "CALCULATED",
 				  "sensorDetected": true,
-				  "score": 0.5,
+				  "score": 0.6770833333333334,
 				  "level": "MEDIUM",
 				  "currentLoad": 24.0,
 				  "capacity": 48,

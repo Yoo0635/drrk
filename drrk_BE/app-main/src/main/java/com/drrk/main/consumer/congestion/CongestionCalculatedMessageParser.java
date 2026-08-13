@@ -32,22 +32,23 @@ public class CongestionCalculatedMessageParser {
 
 	private void validate(CongestionCalculatedMessage message) {
 		validateUuidV4(message.messageId(), "messageId");
-		if (!"4.0".equals(message.schemaVersion())) {
+		if (!"5.0".equals(message.schemaVersion())) {
 			throw new InvalidCongestionMessageException("Unsupported schemaVersion");
 		}
-		if (message.status() == CongestionCalculationStatus.FORMULA_PENDING) {
-			if (!"formula-pending-v1".equals(message.calculationVersion())
-					|| message.score() != null
+		if (message.status() == CongestionCalculationStatus.FORMULA_PENDING
+				|| message.status() == CongestionCalculationStatus.NO_SERVICE) {
+			if (message.score() != null
 					|| message.level() != null
 					|| message.currentLoad() != null
 					|| message.capacity() != null
 					|| message.forecastLoad() != null
 					|| message.projectedScore() != null
 					|| message.lastTrainDepartureAt() != null) {
-				throw new InvalidCongestionMessageException("Invalid FORMULA_PENDING payload");
+				throw new InvalidCongestionMessageException("Invalid score-less payload");
 			}
 		}
-		if (message.status() == CongestionCalculationStatus.CALCULATED) {
+		if (message.status() == CongestionCalculationStatus.CALCULATED
+				|| message.status() == CongestionCalculationStatus.NO_FLIGHT_DATA) {
 			validateCalculated(message);
 		}
 		validateModelMessageId(message.inputs().modelMessageId());
@@ -67,11 +68,11 @@ public class CongestionCalculatedMessageParser {
 		if (message.lastTrainDepartureAt().isAfter(message.calculatedAt())) {
 			throw new InvalidCongestionMessageException("lastTrainDepartureAt must not be after calculatedAt");
 		}
-		if (!nearlyEqual(message.score(), clamp(message.currentLoad() / message.capacity()))) {
+		if (!nearlyEqual(message.score(),
+				clamp((message.currentLoad() + message.forecastLoad()) / message.capacity()))) {
 			throw new InvalidCongestionMessageException("Invalid CALCULATED summary");
 		}
-		if (!nearlyEqual(message.projectedScore(),
-				clamp((message.currentLoad() + message.forecastLoad()) / message.capacity()))) {
+		if (!nearlyEqual(message.projectedScore(), message.score())) {
 			throw new InvalidCongestionMessageException("Invalid projectedScore");
 		}
 		String expectedLevel = levelFor(message.score());

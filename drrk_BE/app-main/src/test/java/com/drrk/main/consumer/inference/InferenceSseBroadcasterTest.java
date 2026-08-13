@@ -26,6 +26,7 @@ class InferenceSseBroadcasterTest {
 			airportGuideStore,
 			clock,
 			Duration.ofSeconds(5),
+			Duration.ofSeconds(25),
 			Duration.ofMinutes(30)
 	);
 
@@ -39,8 +40,8 @@ class InferenceSseBroadcasterTest {
 		broadcaster.subscribe(emitter);
 
 		assertThat(emitter.events()).containsExactly(
-				"event:carrier-count\nid:8c530c6c-f819-4ad6-b687-760dc698c617\ndata:{\"n_carriers\":3,\"score\":0.25,\"level\":\"LOW\"}\n\n",
-				"event:carrier-count\nid:9d82ae8a-0a67-4540-b519-528386835f80\ndata:{\"n_carriers\":1,\"score\":0.25,\"level\":\"LOW\"}\n\n"
+				"event:carrier-count\nid:8c530c6c-f819-4ad6-b687-760dc698c617\ndata:{\"n_carriers\":3,\"score\":0.375,\"level\":\"LOW\"}\n\n",
+				"event:carrier-count\nid:9d82ae8a-0a67-4540-b519-528386835f80\ndata:{\"n_carriers\":1,\"score\":0.375,\"level\":\"LOW\"}\n\n"
 		);
 	}
 
@@ -58,10 +59,10 @@ class InferenceSseBroadcasterTest {
 		broadcaster.broadcastLatestSnapshots();
 
 		assertThat(first.events()).containsExactly(
-				"event:carrier-count\nid:8c530c6c-f819-4ad6-b687-760dc698c617\ndata:{\"n_carriers\":3,\"score\":0.25,\"level\":\"LOW\"}\n\n"
+				"event:carrier-count\nid:8c530c6c-f819-4ad6-b687-760dc698c617\ndata:{\"n_carriers\":3,\"score\":0.375,\"level\":\"LOW\"}\n\n"
 		);
 		assertThat(second.events()).containsExactly(
-				"event:carrier-count\nid:8c530c6c-f819-4ad6-b687-760dc698c617\ndata:{\"n_carriers\":3,\"score\":0.25,\"level\":\"LOW\"}\n\n"
+				"event:carrier-count\nid:8c530c6c-f819-4ad6-b687-760dc698c617\ndata:{\"n_carriers\":3,\"score\":0.375,\"level\":\"LOW\"}\n\n"
 		);
 	}
 
@@ -127,9 +128,36 @@ class InferenceSseBroadcasterTest {
 		broadcaster.broadcastLatestSnapshots();
 
 		assertThat(healthy.events()).containsExactly(
-				"event:carrier-count\nid:8c530c6c-f819-4ad6-b687-760dc698c617\ndata:{\"n_carriers\":3,\"score\":0.25,\"level\":\"LOW\"}\n\n"
+				"event:carrier-count\nid:8c530c6c-f819-4ad6-b687-760dc698c617\ndata:{\"n_carriers\":3,\"score\":0.375,\"level\":\"LOW\"}\n\n"
 		);
 		assertThat(failing.completed()).isTrue();
+	}
+
+	@Test
+	void keepsScoreWhileCongestionResultIsWithinCongestionMaxAge() {
+		// carrier snapshot은 5초 TTL, 혼잡도는 25초 TTL — 10초 주기 발행에도 score 유지
+		store.updateIfLatest(snapshot("8c530c6c-f819-4ad6-b687-760dc698c617", "desk01", "2026-08-13T05:00:10Z", 3));
+		airportGuideStore.handle(calculatedCongestion("2026-08-13T04:59:52Z"));
+		CapturingEmitter emitter = new CapturingEmitter();
+
+		broadcaster.subscribe(emitter);
+
+		assertThat(emitter.events()).containsExactly(
+				"event:carrier-count\nid:8c530c6c-f819-4ad6-b687-760dc698c617\ndata:{\"n_carriers\":3,\"score\":0.375,\"level\":\"LOW\"}\n\n"
+		);
+	}
+
+	@Test
+	void dropsScoreWhenCongestionResultIsOlderThanCongestionMaxAge() {
+		store.updateIfLatest(snapshot("8c530c6c-f819-4ad6-b687-760dc698c617", "desk01", "2026-08-13T05:00:10Z", 3));
+		airportGuideStore.handle(calculatedCongestion("2026-08-13T04:59:40Z"));
+		CapturingEmitter emitter = new CapturingEmitter();
+
+		broadcaster.subscribe(emitter);
+
+		assertThat(emitter.events()).containsExactly(
+				"event:carrier-count\nid:8c530c6c-f819-4ad6-b687-760dc698c617\ndata:{\"n_carriers\":3,\"score\":null,\"level\":null}\n\n"
+		);
 	}
 
 	private static LatestInferenceSnapshot snapshot(String messageId, String spaceId, String endedAt, int carriers) {
@@ -141,7 +169,7 @@ class InferenceSseBroadcasterTest {
 		return CongestionCalculatedMessage.calculated(
 				UUID.randomUUID(),
 				instant,
-				"platform-congestion-v1",
+				"platform-congestion-v2",
 				false,
 				12.0,
 				48L,

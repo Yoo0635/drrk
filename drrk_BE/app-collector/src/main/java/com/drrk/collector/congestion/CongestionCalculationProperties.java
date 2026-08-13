@@ -10,8 +10,8 @@ public class CongestionCalculationProperties {
 	private Duration modelMaxAge = Duration.ofSeconds(5);
 	private long trainCapacity = 48;
 	private int walkMinutes = 10;
-	private int forecastLeadMinutes = 43;
-	private int forecastDistributionMinutes = 14;
+	private int exitDelayMinMinutes = 45;
+	private int exitDelayMaxMinutes = 90;
 	private double rK = 0.09;
 	private double rF = 0.22;
 	private double cK = 0.75;
@@ -49,20 +49,20 @@ public class CongestionCalculationProperties {
 		this.walkMinutes = walkMinutes;
 	}
 
-	public int getForecastLeadMinutes() {
-		return forecastLeadMinutes;
+	public int getExitDelayMinMinutes() {
+		return exitDelayMinMinutes;
 	}
 
-	public void setForecastLeadMinutes(int forecastLeadMinutes) {
-		this.forecastLeadMinutes = forecastLeadMinutes;
+	public void setExitDelayMinMinutes(int exitDelayMinMinutes) {
+		this.exitDelayMinMinutes = exitDelayMinMinutes;
 	}
 
-	public int getForecastDistributionMinutes() {
-		return forecastDistributionMinutes;
+	public int getExitDelayMaxMinutes() {
+		return exitDelayMaxMinutes;
 	}
 
-	public void setForecastDistributionMinutes(int forecastDistributionMinutes) {
-		this.forecastDistributionMinutes = forecastDistributionMinutes;
+	public void setExitDelayMaxMinutes(int exitDelayMaxMinutes) {
+		this.exitDelayMaxMinutes = exitDelayMaxMinutes;
 	}
 
 	public double getRK() {

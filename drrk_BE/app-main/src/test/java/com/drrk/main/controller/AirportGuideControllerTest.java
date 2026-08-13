@@ -47,7 +47,7 @@ class AirportGuideControllerTest {
 
 		mockMvc.perform(get("/api/v1/platform/congestion"))
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.score").value(0.5))
+				.andExpect(jsonPath("$.score").value(0.6770833333333334))
 				.andExpect(jsonPath("$.level").value("MEDIUM"))
 				.andExpect(jsonPath("$.currentLoad").value(24.0))
 				.andExpect(jsonPath("$.capacity").value(48))
@@ -64,7 +64,7 @@ class AirportGuideControllerTest {
 
 		mockMvc.perform(get("/api/v1/routes/recommendation"))
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.score").value(0.5));
+				.andExpect(jsonPath("$.score").value(0.6770833333333334));
 	}
 
 	@Test
@@ -84,7 +84,7 @@ class AirportGuideControllerTest {
 		return CongestionCalculatedMessage.calculated(
 				UUID.fromString("35c9ef91-9f68-4fda-833f-90fa54c25816"),
 				Instant.parse("2026-08-13T06:00:00Z"),
-				"platform-congestion-v1",
+				"platform-congestion-v2",
 				true,
 				24.0,
 				48L,

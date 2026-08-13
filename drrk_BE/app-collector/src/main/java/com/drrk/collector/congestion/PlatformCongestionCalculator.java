@@ -9,8 +9,10 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
@@ -18,6 +20,23 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
 
+/**
+ * 승강장 혼잡도 공식 v2.
+ *
+ * <p>C(t) = min(1, L(t) / L_cap). L(t)는 누적 창 (T_prev, T_next] — 직전 열차 출발부터
+ * 다음 열차 도착까지 — 동안 승강장에 누적될 철도행 수하물량이다. 승강장 도착 시각 τ에 대해
+ * 센서 통과 시각은 τ − w 이므로:</p>
+ *
+ * <ul>
+ *   <li>실측층: 센서 통과 시각 s ∈ (T_prev − w, min(now, T_next − w)] 의 계측 합</li>
+ *   <li>예보층: s ∈ (now, T_next − w] 구간에 대해 α(h)·Σ_i B_i·φ_i 로 채움.
+ *       B_i = k_i·r_K·c_K + f_i·r_F·c_F, φ_i는 편 i 도착 후 [exitDelayMin, exitDelayMax]
+ *       구간의 균등분포, α(h) = t1eg1(h) / Σ_i (k_i + f_i)·Φ_i(h)</li>
+ * </ul>
+ *
+ * <p>열차 스케줄이 없어 T_prev 또는 T_next를 정의할 수 없으면 NO_SERVICE(혼잡도 미산출),
+ * 예보층이 필요한데 사용 가능한 항공편 데이터가 없으면 NO_FLIGHT_DATA(실측층만 산출)이다.</p>
+ */
 public class PlatformCongestionCalculator implements CongestionCalculator {
 
 	private static final ZoneId AIRPORT_ZONE = ZoneId.of("Asia/Seoul");
@@ -44,103 +63,152 @@ public class PlatformCongestionCalculator implements CongestionCalculator {
 		Objects.requireNonNull(inputs, "inputs");
 		Instant now = clock.instant();
 		Optional<Instant> lastDeparture = lastDepartureBeforeNow(inputs.railroadOperation().items(), now);
-		if (lastDeparture.isEmpty()) {
-			return CongestionCalculatedMessage.formulaPending(messageIdSupplier.get(), now, inputReferences(inputs));
+		Optional<Instant> nextArrival = nextArrivalAfterNow(inputs.railroadOperation().items(), now);
+		if (lastDeparture.isEmpty() || nextArrival.isEmpty()) {
+			return CongestionCalculatedMessage.noService(messageIdSupplier.get(), now, inputReferences(inputs));
 		}
 
-		double currentLoad = currentMeasuredLoad(inputs.modelMeasurements(), lastDeparture.orElseThrow(), now);
-		double forecastLoad = forecastLoad(
-				inputs.arrivalStatus().items(),
-				inputs.passengerForecast().items(),
-				now,
-				now.plus(Duration.ofMinutes(properties.getForecastLeadMinutes()))
-		);
+		Instant windowStart = lastDeparture.orElseThrow();
+		Instant windowEnd = nextArrival.orElseThrow();
+		Duration walk = Duration.ofMinutes(properties.getWalkMinutes());
+		Instant sensorWindowStart = windowStart.minus(walk);
+		Instant sensorWindowEnd = windowEnd.minus(walk);
+
+		double measuredLoad = measuredLoad(inputs.modelMeasurements(), sensorWindowStart, minOf(now, sensorWindowEnd));
+
+		double forecastLoad = 0d;
+		boolean forecastRequired = sensorWindowEnd.isAfter(now);
+		boolean flightDataMissing = false;
+		if (forecastRequired) {
+			List<FlightForecast> flights = usableFlights(inputs.arrivalStatus().items());
+			if (flights.isEmpty()) {
+				flightDataMissing = true;
+			} else {
+				forecastLoad = forecastLoad(flights, inputs.passengerForecast().items(), now, sensorWindowEnd);
+			}
+		}
+
+		List<RailroadArrivalResult> railroadArrivals = mapRailroadArrivals(inputs.railroadOperation().items(), now);
+		CongestionInputReferences references = inputReferences(inputs);
+		if (flightDataMissing) {
+			return CongestionCalculatedMessage.noFlightData(
+					messageIdSupplier.get(),
+					now,
+					CongestionCalculatedMessage.CALCULATION_VERSION_V2,
+					measuredLoad > 0,
+					measuredLoad,
+					properties.getTrainCapacity(),
+					forecastLoad,
+					windowStart,
+					railroadArrivals,
+					references
+			);
+		}
 		return CongestionCalculatedMessage.calculated(
 				messageIdSupplier.get(),
 				now,
-				"platform-congestion-v1",
-				currentLoad > 0,
-				currentLoad,
+				CongestionCalculatedMessage.CALCULATION_VERSION_V2,
+				measuredLoad > 0,
+				measuredLoad,
 				properties.getTrainCapacity(),
 				forecastLoad,
-				lastDeparture.orElseThrow(),
-				mapRailroadArrivals(inputs.railroadOperation().items(), now),
-				inputReferences(inputs)
+				windowStart,
+				railroadArrivals,
+				references
 		);
 	}
 
-	private double currentMeasuredLoad(
+	/**
+	 * 실측층: 센서 통과 시각 s ∈ (windowStart, windowEnd] 의 캐리어 계측 합.
+	 */
+	private double measuredLoad(
 			List<ModelMeasurementSnapshot> measurements,
-			Instant lastDeparture,
-			Instant now
+			Instant windowStart,
+			Instant windowEnd
 	) {
-		Duration walkDuration = Duration.ofMinutes(properties.getWalkMinutes());
-		Instant sensorWindowStart = lastDeparture.minus(walkDuration);
-		Instant sensorWindowEnd = now.minus(walkDuration);
+		if (!windowEnd.isAfter(windowStart)) {
+			return 0d;
+		}
 		return measurements.stream()
-				.filter(snapshot -> !snapshot.measuredAt().isBefore(sensorWindowStart))
-				.filter(snapshot -> !snapshot.measuredAt().isAfter(sensorWindowEnd))
+				.filter(snapshot -> snapshot.measuredAt().isAfter(windowStart))
+				.filter(snapshot -> !snapshot.measuredAt().isAfter(windowEnd))
 				.mapToLong(ModelMeasurementSnapshot::carrierCount)
 				.sum();
 	}
 
+	/**
+	 * 예보층: 센서 통과 시각 s ∈ (forecastStart, forecastEnd] 구간을 시간대(h) 단위로
+	 * 나눠 α(h)·Σ_i B_i·mass_i(h ∩ S) 를 합산한다.
+	 */
 	private double forecastLoad(
-			List<ArrivalStatusItem> arrivals,
+			List<FlightForecast> flights,
 			List<PassengerForecastItem> forecastItems,
 			Instant forecastStart,
 			Instant forecastEnd
 	) {
-		return arrivals.stream()
-				.mapToDouble(arrival -> adjustedExpectedBaggage(arrival, arrivals, forecastItems)
-						* overlapRatio(arrival, forecastStart, forecastEnd))
-				.sum();
-	}
-
-	private double adjustedExpectedBaggage(
-			ArrivalStatusItem arrival,
-			List<ArrivalStatusItem> arrivals,
-			List<PassengerForecastItem> forecastItems
-	) {
-		double base = arrival.koreanPassengerCount() * properties.getRK() * properties.getCK()
-				+ arrival.foreignPassengerCount() * properties.getRF() * properties.getCF();
-		Optional<Instant> arrivalTime = parseAirportTime(arrival.effectiveArrivalTime());
-		if (arrivalTime.isEmpty()) {
+		if (!forecastEnd.isAfter(forecastStart)) {
 			return 0d;
 		}
-		String slot = slotOf(arrivalTime.orElseThrow());
+		double total = 0d;
+		Instant hourCursor = forecastStart.atZone(AIRPORT_ZONE).truncatedTo(ChronoUnit.HOURS).toInstant();
+		while (hourCursor.isBefore(forecastEnd)) {
+			Instant hourEnd = hourCursor.plus(Duration.ofHours(1));
+			Instant overlapStart = maxOf(hourCursor, forecastStart);
+			Instant overlapEnd = minOf(hourEnd, forecastEnd);
+			if (overlapEnd.isAfter(overlapStart)) {
+				double alpha = alphaFor(hourCursor, hourEnd, flights, forecastItems);
+				double hourLoad = flights.stream()
+						.mapToDouble(flight -> flight.expectedBaggage()
+								* flight.exitMassBetween(overlapStart, overlapEnd))
+						.sum();
+				total += alpha * hourLoad;
+			}
+			hourCursor = hourEnd;
+		}
+		return total;
+	}
+
+	/**
+	 * α(h) = t1eg1(h) / Σ_i (k_i + f_i)·Φ_i(h). 분모·분자 모두 "시간대 h에 출구를
+	 * 통과하는 인원" 기준으로 시간축을 맞춘다. 자료가 없으면 보정 없이 1을 쓴다.
+	 */
+	private double alphaFor(
+			Instant hourStart,
+			Instant hourEnd,
+			List<FlightForecast> flights,
+			List<PassengerForecastItem> forecastItems
+	) {
+		String slot = slotOf(hourStart);
 		int forecastTotal = forecastItems.stream()
 				.filter(item -> slot.equals(item.timeSlot()))
 				.mapToInt(PassengerForecastItem::expectedPassengerCount)
 				.findFirst()
 				.orElse(0);
-		int slotPassengerTotal = arrivals.stream()
-				.filter(item -> parseAirportTime(item.effectiveArrivalTime())
-						.map(this::slotOf)
-						.filter(slot::equals)
-						.isPresent())
-				.mapToInt(item -> item.koreanPassengerCount() + item.foreignPassengerCount())
+		double expectedExitTotal = flights.stream()
+				.mapToDouble(flight -> flight.totalPassengers() * flight.exitMassBetween(hourStart, hourEnd))
 				.sum();
-		double alpha = forecastTotal > 0 && slotPassengerTotal > 0
-				? (double) forecastTotal / slotPassengerTotal
-				: 1d;
-		return base * alpha;
+		if (forecastTotal <= 0 || expectedExitTotal <= 0d) {
+			return 1d;
+		}
+		return forecastTotal / expectedExitTotal;
 	}
 
-	private double overlapRatio(ArrivalStatusItem arrival, Instant forecastStart, Instant forecastEnd) {
-		Optional<Instant> arrivalTime = parseAirportTime(arrival.effectiveArrivalTime());
-		if (arrivalTime.isEmpty()) {
-			return 0d;
-		}
-		Instant windowStart = arrivalTime.orElseThrow();
-		Instant windowEnd = windowStart.plus(Duration.ofMinutes(properties.getForecastDistributionMinutes()));
-		Instant overlapStart = windowStart.isAfter(forecastStart) ? windowStart : forecastStart;
-		Instant overlapEnd = windowEnd.isBefore(forecastEnd) ? windowEnd : forecastEnd;
-		if (!overlapEnd.isAfter(overlapStart)) {
-			return 0d;
-		}
-		long totalSeconds = Duration.between(windowStart, windowEnd).getSeconds();
-		long overlapSeconds = Duration.between(overlapStart, overlapEnd).getSeconds();
-		return totalSeconds <= 0 ? 0d : (double) overlapSeconds / totalSeconds;
+	private List<FlightForecast> usableFlights(List<ArrivalStatusItem> arrivals) {
+		Duration exitDelayMin = Duration.ofMinutes(properties.getExitDelayMinMinutes());
+		Duration exitDelayMax = Duration.ofMinutes(properties.getExitDelayMaxMinutes());
+		return arrivals.stream()
+				.map(arrival -> parseAirportTime(arrival.effectiveArrivalTime())
+						.map(arrivalTime -> new FlightForecast(
+								arrival.koreanPassengerCount(),
+								arrival.foreignPassengerCount(),
+								arrival.koreanPassengerCount() * properties.getRK() * properties.getCK()
+										+ arrival.foreignPassengerCount() * properties.getRF() * properties.getCF(),
+								arrivalTime.plus(exitDelayMin),
+								arrivalTime.plus(exitDelayMax)
+						))
+						.orElse(null))
+				.filter(Objects::nonNull)
+				.toList();
 	}
 
 	private Optional<Instant> lastDepartureBeforeNow(List<RailroadOperationItem> items, Instant now) {
@@ -149,6 +217,14 @@ public class PlatformCongestionCalculator implements CongestionCalculator {
 				.flatMap(Optional::stream)
 				.filter(departure -> !departure.isAfter(now))
 				.max(Comparator.naturalOrder());
+	}
+
+	private Optional<Instant> nextArrivalAfterNow(List<RailroadOperationItem> items, Instant now) {
+		return items.stream()
+				.map(item -> parseAirportTime(item.scheduledArrivalTime()))
+				.flatMap(Optional::stream)
+				.filter(arrival -> arrival.isAfter(now))
+				.min(Comparator.naturalOrder());
 	}
 
 	private Optional<Instant> effectiveDepartureTime(RailroadOperationItem item) {
@@ -207,8 +283,16 @@ public class PlatformCongestionCalculator implements CongestionCalculator {
 	}
 
 	private String slotOf(Instant instant) {
-		LocalDateTime localDateTime = LocalDateTime.ofInstant(instant, AIRPORT_ZONE);
-		return String.format("%02d_%02d", localDateTime.getHour(), (localDateTime.getHour() + 1) % 24);
+		ZonedDateTime zoned = instant.atZone(AIRPORT_ZONE);
+		return String.format("%02d_%02d", zoned.getHour(), (zoned.getHour() + 1) % 24);
+	}
+
+	private static Instant minOf(Instant left, Instant right) {
+		return left.isBefore(right) ? left : right;
+	}
+
+	private static Instant maxOf(Instant left, Instant right) {
+		return left.isAfter(right) ? left : right;
 	}
 
 	private CongestionInputReferences inputReferences(CongestionInputs inputs) {
@@ -223,5 +307,37 @@ public class PlatformCongestionCalculator implements CongestionCalculator {
 				latestMeasurement.messageId(),
 				latestMeasurement.measuredAt()
 		);
+	}
+
+	/**
+	 * 편 i의 예보: 총 승객 수, 기대 수하물량 B_i, 출구 통과(=센서 통과) 균등분포 구간.
+	 */
+	private record FlightForecast(
+			int koreanPassengers,
+			int foreignPassengers,
+			double expectedBaggage,
+			Instant exitStart,
+			Instant exitEnd
+	) {
+
+		int totalPassengers() {
+			return koreanPassengers + foreignPassengers;
+		}
+
+		/**
+		 * φ_i 균등분포에서 [from, to) 구간이 차지하는 질량 (0~1).
+		 */
+		double exitMassBetween(Instant from, Instant to) {
+			Instant overlapStart = exitStart.isAfter(from) ? exitStart : from;
+			Instant overlapEnd = exitEnd.isBefore(to) ? exitEnd : to;
+			if (!overlapEnd.isAfter(overlapStart)) {
+				return 0d;
+			}
+			long totalSeconds = Duration.between(exitStart, exitEnd).getSeconds();
+			if (totalSeconds <= 0) {
+				return 0d;
+			}
+			return (double) Duration.between(overlapStart, overlapEnd).getSeconds() / totalSeconds;
+		}
 	}
 }
