@@ -52,6 +52,7 @@ public class RailroadOperationMapper {
 						stationCode,
 						arrivalTimeText,
 						null,
+						normalizeBlankToNull(item.planDptrDttm()),
 						normalizeBlankToNull(item.accomDptrDttm()),
 						normalize(item.trnClsfNm())
 				),

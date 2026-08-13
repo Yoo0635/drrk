@@ -38,8 +38,9 @@ export function createCarrierCountStream({
     }
 
     onSnapshot({
-      spaceId: payload.space_id.trim(),
       carrierCount: payload.n_carriers,
+      congestionScore: payload.score,
+      congestionLevel: payload.level,
       messageId: event.lastEventId,
       receivedAt: now(),
     });
@@ -78,11 +79,18 @@ function isCarrierCountEvent(value: unknown): value is CarrierCountEvent {
 
   const candidate = value as Record<string, unknown>;
   const carrierCount = candidate.n_carriers;
+  const score = candidate.score;
+  const level = candidate.level;
   return (
-    typeof candidate.space_id === "string" &&
-    candidate.space_id.trim().length > 0 &&
     typeof carrierCount === "number" &&
     Number.isInteger(carrierCount) &&
-    carrierCount >= 0
+    carrierCount >= 0 &&
+    ((score === null && level === null) ||
+      (typeof score === "number" &&
+        Number.isFinite(score) &&
+        score >= 0 &&
+        score <= 1 &&
+        typeof level === "string" &&
+        level.trim().length > 0))
   );
 }

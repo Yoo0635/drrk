@@ -1,5 +1,6 @@
 package com.drrk.main.consumer.inference;
 
+import com.drrk.main.consumer.congestion.LatestAirportGuideStore;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.List;
@@ -22,6 +23,7 @@ public class InferenceSseBroadcaster {
 	private static final String EVENT_NAME = "carrier-count";
 
 	private final LatestInferenceSnapshotStore store;
+	private final LatestAirportGuideStore airportGuideStore;
 	private final ObjectMapper objectMapper;
 	private final Duration emitterTimeout;
 	private final Set<SseEmitter> emitters = ConcurrentHashMap.newKeySet();
@@ -29,16 +31,22 @@ public class InferenceSseBroadcaster {
 	@Autowired
 	public InferenceSseBroadcaster(
 			LatestInferenceSnapshotStore store,
+			LatestAirportGuideStore airportGuideStore,
 			ObjectMapper objectMapper,
 			@Value("${inference.stream.emitter-timeout:PT30M}") Duration emitterTimeout
 	) {
 		this.store = store;
+		this.airportGuideStore = airportGuideStore;
 		this.objectMapper = objectMapper;
 		this.emitterTimeout = emitterTimeout;
 	}
 
-	InferenceSseBroadcaster(LatestInferenceSnapshotStore store, Duration emitterTimeout) {
-		this(store, new ObjectMapper(), emitterTimeout);
+	InferenceSseBroadcaster(
+			LatestInferenceSnapshotStore store,
+			LatestAirportGuideStore airportGuideStore,
+			Duration emitterTimeout
+	) {
+		this(store, airportGuideStore, new ObjectMapper(), emitterTimeout);
 	}
 
 	public SseEmitter subscribe() {
@@ -99,9 +107,14 @@ public class InferenceSseBroadcaster {
 	}
 
 	private String toJson(LatestInferenceSnapshot snapshot) {
+		var latestGuide = airportGuideStore.latest().orElse(null);
 		try {
 			return objectMapper.writeValueAsString(
-					new CarrierCountStreamResponse(snapshot.spaceId(), snapshot.carrierCount())
+					new CarrierCountStreamResponse(
+							snapshot.carrierCount(),
+							latestGuide == null ? null : latestGuide.score(),
+							latestGuide == null ? null : latestGuide.level()
+					)
 			);
 		} catch (JacksonException exception) {
 			throw new IllegalStateException("failed to serialize carrier count SSE payload", exception);

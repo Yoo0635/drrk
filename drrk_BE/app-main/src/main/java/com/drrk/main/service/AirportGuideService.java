@@ -15,12 +15,17 @@ public class AirportGuideService {
 		this.store = store;
 	}
 
-	public Optional<RouteRecommendationResponse> routeRecommendation() {
-		return store.latest().map(message -> new RouteRecommendationResponse(
-				message.recommendedRoute(),
+	public Optional<PlatformCongestionResponse> platformCongestion() {
+		return store.latest().map(message -> new PlatformCongestionResponse(
 				message.calculatedAt(),
+				message.score(),
+				message.level(),
+				message.currentLoad(),
+				message.capacity(),
+				message.forecastLoad(),
+				message.projectedScore(),
 				message.sensorDetected(),
-				message.routeResults()
+				message.lastTrainDepartureAt()
 		));
 	}
 

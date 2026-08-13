@@ -1,22 +1,14 @@
 package com.drrk.main.consumer.congestion;
 
-import com.drrk.messaging.congestion.AirportRoute;
 import com.drrk.messaging.congestion.CongestionCalculatedMessage;
 import com.drrk.messaging.congestion.CongestionCalculationStatus;
-import com.drrk.messaging.congestion.MovingWalkwayStatus;
-import com.drrk.messaging.congestion.RouteCongestionResult;
-import com.drrk.messaging.congestion.RouteStatus;
-import java.util.Comparator;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.time.Instant;
 import java.util.UUID;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 
 public class CongestionCalculatedMessageParser {
 
-	private static final double CAPACITY = 4.2;
 	private static final double EPSILON = 1.0e-9;
 
 	private final ObjectMapper objectMapper;
@@ -41,16 +33,18 @@ public class CongestionCalculatedMessageParser {
 
 	private void validate(CongestionCalculatedMessage message) {
 		validateUuidV4(message.messageId(), "messageId");
-		if (!"3.0".equals(message.schemaVersion())) {
+		if (!"4.0".equals(message.schemaVersion())) {
 			throw new InvalidCongestionMessageException("Unsupported schemaVersion");
 		}
 		if (message.status() == CongestionCalculationStatus.FORMULA_PENDING) {
-			if (!"formula-pending-v0".equals(message.calculationVersion())
+			if (!"formula-pending-v1".equals(message.calculationVersion())
 					|| message.score() != null
 					|| message.level() != null
-					|| !message.routeResults().isEmpty()
-					|| message.recommendedRoute() != null
-					|| !message.railroadArrivals().isEmpty()) {
+					|| message.currentLoad() != null
+					|| message.capacity() != null
+					|| message.forecastLoad() != null
+					|| message.projectedScore() != null
+					|| message.lastTrainDepartureAt() != null) {
 				throw new InvalidCongestionMessageException("Invalid FORMULA_PENDING payload");
 			}
 		}
@@ -61,49 +55,29 @@ public class CongestionCalculatedMessageParser {
 	}
 
 	private void validateCalculated(CongestionCalculatedMessage message) {
-		Set<AirportRoute> routes = new HashSet<>(message.routeResults().stream()
-				.map(RouteCongestionResult::route)
-				.toList());
-		if (message.calculationVersion() == null || message.calculationVersion().isBlank()
-				|| message.routeResults().size() != 3
-				|| routes.size() != 3
-				|| !routes.containsAll(List.of(AirportRoute.A, AirportRoute.B, AirportRoute.C))) {
-			throw new InvalidCongestionMessageException("Invalid CALCULATED routes");
+		if (message.calculationVersion() == null || message.calculationVersion().isBlank()) {
+			throw new InvalidCongestionMessageException("Missing calculationVersion");
 		}
-		RouteCongestionResult recommended = message.routeResults().stream()
-				.filter(result -> result.route() == message.recommendedRoute())
-				.findFirst()
-				.orElseThrow(() -> new InvalidCongestionMessageException("Recommended route is missing"));
-		if (message.score() == null || !Double.isFinite(message.score())
-				|| Double.compare(message.score(), recommended.volumeCapacityRatio()) != 0
-				|| !recommended.congestionStatus().name().equals(message.level())) {
+		if (message.score() == null || message.currentLoad() == null || message.capacity() == null
+				|| message.forecastLoad() == null || message.projectedScore() == null
+				|| message.lastTrainDepartureAt() == null || !Double.isFinite(message.score())
+				|| !Double.isFinite(message.currentLoad()) || !Double.isFinite(message.forecastLoad())
+				|| !Double.isFinite(message.projectedScore()) || message.capacity() <= 0) {
 			throw new InvalidCongestionMessageException("Invalid CALCULATED summary");
 		}
-		for (RouteCongestionResult result : message.routeResults()) {
-			double expectedLoad = result.stay() + result.incoming() + result.residual();
-			if (!nearlyEqual(result.load(), expectedLoad)
-					|| !nearlyEqual(result.volumeCapacityRatio(), result.load() / CAPACITY)) {
-				throw new InvalidCongestionMessageException("Route congestion formula is inconsistent");
-			}
-			MovingWalkwayStatus expected = MovingWalkwayStatus.fromVolumeCapacityRatio(
-					result.volumeCapacityRatio()
-			);
-			if (result.congestionStatus() != expected) {
-				throw new InvalidCongestionMessageException("Route congestion status does not match v/c");
-			}
-			RouteStatus expectedRouteStatus = message.sensorDetected() && result.route() == AirportRoute.B
-					? RouteStatus.CONGESTED
-					: RouteStatus.CLEAR;
-			if (result.status() != expectedRouteStatus) {
-				throw new InvalidCongestionMessageException("Route sensor status does not match sensorDetected");
-			}
+		if (message.lastTrainDepartureAt().isAfter(message.calculatedAt())) {
+			throw new InvalidCongestionMessageException("lastTrainDepartureAt must not be after calculatedAt");
 		}
-		RouteCongestionResult fastest = message.routeResults().stream()
-				.min(Comparator.comparingLong(RouteCongestionResult::totalTravelTimeSeconds)
-						.thenComparing(RouteCongestionResult::route))
-				.orElseThrow();
-		if (fastest.route() != message.recommendedRoute()) {
-			throw new InvalidCongestionMessageException("Recommended route is not the shortest route");
+		if (!nearlyEqual(message.score(), clamp(message.currentLoad() / message.capacity()))) {
+			throw new InvalidCongestionMessageException("Invalid CALCULATED summary");
+		}
+		if (!nearlyEqual(message.projectedScore(),
+				clamp((message.currentLoad() + message.forecastLoad()) / message.capacity()))) {
+			throw new InvalidCongestionMessageException("Invalid projectedScore");
+		}
+		String expectedLevel = levelFor(message.score());
+		if (!expectedLevel.equals(message.level())) {
+			throw new InvalidCongestionMessageException("level does not match score");
 		}
 	}
 
@@ -120,5 +94,22 @@ public class CongestionCalculatedMessageParser {
 		} catch (IllegalArgumentException | NullPointerException exception) {
 			throw new InvalidCongestionMessageException(field + " must be UUID v4", exception);
 		}
+	}
+
+	private double clamp(double value) {
+		return Math.min(1d, value);
+	}
+
+	private String levelFor(double score) {
+		if (score >= 1d) {
+			return "FULL";
+		}
+		if (score >= 0.7d) {
+			return "HIGH";
+		}
+		if (score >= 0.4d) {
+			return "MEDIUM";
+		}
+		return "LOW";
 	}
 }

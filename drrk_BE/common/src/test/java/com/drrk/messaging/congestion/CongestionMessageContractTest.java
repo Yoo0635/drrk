@@ -31,12 +31,17 @@ class CongestionMessageContractTest {
 		);
 
 		assertEquals("35c9ef91-9f68-4fda-833f-90fa54c25816", message.messageId());
-		assertEquals("3.0", message.schemaVersion());
-		assertEquals("formula-pending-v0", message.calculationVersion());
+		assertEquals("4.0", message.schemaVersion());
+		assertEquals("formula-pending-v1", message.calculationVersion());
 		assertEquals(CongestionCalculationStatus.FORMULA_PENDING, message.status());
 		assertEquals(false, message.sensorDetected());
 		assertNull(message.score());
 		assertNull(message.level());
+		assertNull(message.currentLoad());
+		assertNull(message.capacity());
+		assertNull(message.forecastLoad());
+		assertNull(message.projectedScore());
+		assertNull(message.lastTrainDepartureAt());
 		assertEquals(inputs, message.inputs());
 	}
 
@@ -58,47 +63,8 @@ class CongestionMessageContractTest {
 	}
 
 	@Test
-	void createsCalculatedGuideWithAllAirportRoutesAndSensorDetection() {
+	void createsCalculatedGuideWithLoadCapacityAndRailroadArrivals() {
 		CongestionInputReferences inputs = inputs();
-		RouteCongestionResult routeA = new RouteCongestionResult(
-				AirportRoute.A,
-				Instant.parse("2026-08-13T05:00:20Z"),
-				0.0,
-				0.0,
-				0.0,
-				0.0,
-				0.0,
-				MovingWalkwayStatus.AVAILABLE,
-				RouteStatus.CLEAR,
-				30,
-				90
-		);
-		RouteCongestionResult routeB = new RouteCongestionResult(
-				AirportRoute.B,
-				Instant.parse("2026-08-13T05:00:30Z"),
-				1.0,
-				2.0,
-				0.5,
-				3.5,
-				3.5 / 4.2,
-				MovingWalkwayStatus.NORMAL,
-				RouteStatus.CONGESTED,
-				20,
-				80
-		);
-		RouteCongestionResult routeC = new RouteCongestionResult(
-				AirportRoute.C,
-				Instant.parse("2026-08-13T05:00:40Z"),
-				3.0,
-				2.0,
-				1.0,
-				6.0,
-				6.0 / 4.2,
-				MovingWalkwayStatus.CONGESTED,
-				RouteStatus.CLEAR,
-				50,
-				110
-		);
 		RailroadArrivalResult train = new RailroadArrivalResult(
 				"1234",
 				"일반",
@@ -110,80 +76,72 @@ class CongestionMessageContractTest {
 		CongestionCalculatedMessage message = CongestionCalculatedMessage.calculated(
 				UUID.fromString("35c9ef91-9f68-4fda-833f-90fa54c25816"),
 				Instant.parse("2026-08-13T05:00:00Z"),
-				"moving-walkway-v1",
+				"platform-congestion-v1",
 				true,
-				List.of(routeA, routeB, routeC),
-				AirportRoute.B,
+				24.0,
+				48L,
+				8.5,
+				Instant.parse("2026-08-13T04:55:00Z"),
 				List.of(train),
 				inputs
 		);
 
-		assertEquals("3.0", message.schemaVersion());
+		assertEquals("4.0", message.schemaVersion());
 		assertEquals(CongestionCalculationStatus.CALCULATED, message.status());
 		assertEquals(true, message.sensorDetected());
-		assertEquals(List.of(routeA, routeB, routeC), message.routeResults());
-		assertEquals(AirportRoute.B, message.recommendedRoute());
+		assertEquals(24.0 / 48.0, message.score());
+		assertEquals("MEDIUM", message.level());
+		assertEquals(24.0, message.currentLoad());
+		assertEquals(48L, message.capacity());
+		assertEquals(8.5, message.forecastLoad());
+		assertEquals((24.0 + 8.5) / 48.0, message.projectedScore());
+		assertEquals(Instant.parse("2026-08-13T04:55:00Z"), message.lastTrainDepartureAt());
 		assertEquals(List.of(train), message.railroadArrivals());
-		assertEquals(routeB.volumeCapacityRatio(), message.score());
-		assertEquals("NORMAL", message.level());
 	}
 
 	@Test
-	void exposesAirportRoutesAndDemoStatusesInStableOrder() {
-		assertEquals(List.of(AirportRoute.A, AirportRoute.B, AirportRoute.C), List.of(AirportRoute.values()));
-		assertEquals(List.of(RouteStatus.CLEAR, RouteStatus.CONGESTED), List.of(RouteStatus.values()));
-	}
-
-	@Test
-	void acceptsNormalStatusForRatioAbovePointSevenThroughOne() {
-		RouteCongestionResult result = new RouteCongestionResult(
-				AirportRoute.B,
-				Instant.EPOCH,
-				1.0,
-				2.0,
-				0.36,
-				3.36,
-				0.8,
-				MovingWalkwayStatus.NORMAL,
-				RouteStatus.CLEAR,
-				20,
-				80
+	void clampsProjectedScoreAtOne() {
+		CongestionCalculatedMessage message = CongestionCalculatedMessage.calculated(
+				UUID.randomUUID(),
+				Instant.parse("2026-08-13T05:00:00Z"),
+				"platform-congestion-v1",
+				true,
+				60.0,
+				48L,
+				20.0,
+				Instant.parse("2026-08-13T04:55:00Z"),
+				List.of(),
+				inputs()
 		);
 
-		assertEquals(MovingWalkwayStatus.NORMAL, result.congestionStatus());
+		assertEquals(1.0, message.score());
+		assertEquals("FULL", message.level());
+		assertEquals(1.0, message.projectedScore());
 	}
 
 	@Test
-	void rejectsCalculatedResultsWhenRecommendedRouteIsMissing() {
-		RouteCongestionResult routeA = route(AirportRoute.A);
-		RouteCongestionResult routeC = route(AirportRoute.C);
-
+	void rejectsCalculatedResultsWithoutCapacityOrDepartureTime() {
 		assertThrows(IllegalArgumentException.class, () -> CongestionCalculatedMessage.calculated(
 				UUID.randomUUID(),
 				Instant.EPOCH,
-				"moving-walkway-v1",
+				"platform-congestion-v1",
 				false,
-				List.of(routeA, routeC),
-				AirportRoute.B,
+				10.0,
+				0L,
+				0.0,
+				Instant.EPOCH,
 				List.of(),
 				inputs()
 		));
-	}
-
-	@Test
-	void rejectsCalculatedResultsWithDuplicateAirportRoute() {
-		RouteCongestionResult routeA = route(AirportRoute.A);
-		RouteCongestionResult routeB = route(AirportRoute.B);
-		RouteCongestionResult duplicateRouteB = route(AirportRoute.B);
-		RouteCongestionResult routeC = route(AirportRoute.C);
-
 		assertThrows(IllegalArgumentException.class, () -> CongestionCalculatedMessage.calculated(
 				UUID.randomUUID(),
 				Instant.EPOCH,
-				"moving-walkway-v1",
+				"platform-congestion-v1",
 				false,
-				List.of(routeA, routeB, duplicateRouteB, routeC),
-				AirportRoute.B,
+				10.0,
+				48L,
+				0.0,
+				null,
 				List.of(),
 				inputs()
 		));
@@ -209,22 +167,6 @@ class CongestionMessageContractTest {
 				4,
 				"8c530c6c-f819-4ad6-b687-760dc698c617",
 				Instant.parse("2026-08-13T00:00:03Z")
-		);
-	}
-
-	private RouteCongestionResult route(AirportRoute route) {
-		return new RouteCongestionResult(
-				route,
-				Instant.EPOCH,
-				0,
-				0,
-				0,
-				0,
-				0,
-				MovingWalkwayStatus.AVAILABLE,
-				RouteStatus.CLEAR,
-				1,
-				1
 		);
 	}
 }

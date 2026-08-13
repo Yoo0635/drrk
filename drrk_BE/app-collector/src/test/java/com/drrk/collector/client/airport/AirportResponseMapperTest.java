@@ -107,9 +107,9 @@ class AirportResponseMapperTest {
 				  "response": {
 				    "header": {"resultCode": "00", "resultMsg": "NORMAL SERVICE."},
 				    "body": {"items": [
-				      {"trnNo": "A2002", "stnCd": " 110 ", "accomArrvDttm": "20260813090900", "accomDptrDttm": "20260813091000", "trnClsfNm": "AREX"},
-				      {"trnNo": "A2003", "stnCd": "111", "accomArrvDttm": "20260813100800", "accomDptrDttm": "20260813100900", "trnClsNm": "LOCAL"},
-				      {"trnNo": "A2004", "stnCd": "112", "accomArrvDttm": "", "accomDptrDttm": "20260813110900", "trnClsfNm": "LOCAL"}
+				      {"trnNo": "A2002", "stnCd": " 110 ", "accomArrvDttm": "20260813090900", "planDptrDttm": "20260813091000", "accomDptrDttm": "20260813091100", "trnClsfNm": "AREX"},
+				      {"trnNo": "A2003", "stnCd": "111", "accomArrvDttm": "20260813100800", "planDptrDttm": "20260813100900", "accomDptrDttm": "20260813101000", "trnClsNm": "LOCAL"},
+				      {"trnNo": "A2004", "stnCd": "112", "accomArrvDttm": "", "planDptrDttm": "20260813110900", "accomDptrDttm": "20260813111000", "trnClsfNm": "LOCAL"}
 				    ]}
 				  }
 				}
@@ -120,10 +120,10 @@ class AirportResponseMapperTest {
 		assertEquals(
 				List.of(
 						new RailroadOperationItem(
-								"A2002", "110", "20260813090900", null, "20260813091000", "AREX"
+								"A2002", "110", "20260813090900", null, "20260813091000", "20260813091100", "AREX"
 						),
 						new RailroadOperationItem(
-								"A2003", "111", "20260813100800", null, "20260813100900", "LOCAL"
+								"A2003", "111", "20260813100800", null, "20260813100900", "20260813101000", "LOCAL"
 						)
 				),
 				snapshot.items()
@@ -137,15 +137,15 @@ class AirportResponseMapperTest {
 				  "response": {
 				    "header": {"resultCode": "00", "resultMsg": "NORMAL SERVICE."},
 				    "body": {"items": [
-				      {"trnNo":"A0906","stnCd":"110","accomArrvDttm":"20260813090600","accomDptrDttm":"20260813090700","trnClsfNm":"LOCAL"},
-				      {"trnNo":"A0859","stnCd":"110","accomArrvDttm":"20260813085959","accomDptrDttm":"20260813090059","trnClsfNm":"LOCAL"},
-				      {"trnNo":"A0902","stnCd":"110","accomArrvDttm":"20260813090200","accomDptrDttm":"20260813090300","trnClsfNm":"LOCAL"},
-				      {"trnNo":"A0900","stnCd":"110","accomArrvDttm":"20260813090000","accomDptrDttm":"20260813090100","trnClsfNm":"LOCAL"},
-				      {"trnNo":"A0905","stnCd":"110","accomArrvDttm":"20260813090500","accomDptrDttm":"20260813090600","trnClsfNm":"LOCAL"},
-				      {"trnNo":"A0901","stnCd":"110","accomArrvDttm":"20260813090100","accomDptrDttm":"20260813090200","trnClsfNm":"LOCAL"},
-				      {"trnNo":"A0904","stnCd":"110","accomArrvDttm":"20260813090400","accomDptrDttm":"20260813090500","trnClsfNm":"LOCAL"},
-				      {"trnNo":"A0903","stnCd":"110","accomArrvDttm":"20260813090300","accomDptrDttm":"20260813090400","trnClsfNm":"LOCAL"},
-				      {"trnNo":"A0907","stnCd":"110","accomArrvDttm":"20260813090700","accomDptrDttm":"20260813090800","trnClsfNm":"LOCAL"}
+				      {"trnNo":"A0906","stnCd":"110","accomArrvDttm":"20260813090600","planDptrDttm":"20260813090700","accomDptrDttm":"20260813090730","trnClsfNm":"LOCAL"},
+				      {"trnNo":"A0859","stnCd":"110","accomArrvDttm":"20260813085959","planDptrDttm":"20260813090059","accomDptrDttm":"20260813090129","trnClsfNm":"LOCAL"},
+				      {"trnNo":"A0902","stnCd":"110","accomArrvDttm":"20260813090200","planDptrDttm":"20260813090300","accomDptrDttm":"20260813090330","trnClsfNm":"LOCAL"},
+				      {"trnNo":"A0900","stnCd":"110","accomArrvDttm":"20260813090000","planDptrDttm":"20260813090100","accomDptrDttm":"20260813090130","trnClsfNm":"LOCAL"},
+				      {"trnNo":"A0905","stnCd":"110","accomArrvDttm":"20260813090500","planDptrDttm":"20260813090600","accomDptrDttm":"20260813090630","trnClsfNm":"LOCAL"},
+				      {"trnNo":"A0901","stnCd":"110","accomArrvDttm":"20260813090100","planDptrDttm":"20260813090200","accomDptrDttm":"20260813090230","trnClsfNm":"LOCAL"},
+				      {"trnNo":"A0904","stnCd":"110","accomArrvDttm":"20260813090400","planDptrDttm":"20260813090500","accomDptrDttm":"20260813090530","trnClsfNm":"LOCAL"},
+				      {"trnNo":"A0903","stnCd":"110","accomArrvDttm":"20260813090300","planDptrDttm":"20260813090400","accomDptrDttm":"20260813090430","trnClsfNm":"LOCAL"},
+				      {"trnNo":"A0907","stnCd":"110","accomArrvDttm":"20260813090700","planDptrDttm":"20260813090800","accomDptrDttm":"20260813090830","trnClsfNm":"LOCAL"}
 				    ]}
 				  }
 				}
@@ -191,9 +191,9 @@ class AirportResponseMapperTest {
 				  "response": {
 				    "header": {"resultCode": "00", "resultMsg": "NORMAL SERVICE."},
 				    "body": {"items": [
-				      {"trnNo": "", "stnCd": "110", "accomArrvDttm": "20260813090000", "accomDptrDttm": "20260813090100", "trnClsfNm": "LOCAL"},
-				      {"trnNo": "   ", "stnCd": "111", "accomArrvDttm": "20260813090100", "accomDptrDttm": "20260813090200", "trnClsfNm": "LOCAL"},
-				      {"trnNo": "A0900", "stnCd": "110", "accomArrvDttm": "20260813090200", "accomDptrDttm": "20260813090300", "trnClsfNm": "LOCAL"}
+				      {"trnNo": "", "stnCd": "110", "accomArrvDttm": "20260813090000", "planDptrDttm": "20260813090100", "accomDptrDttm": "20260813090130", "trnClsfNm": "LOCAL"},
+				      {"trnNo": "   ", "stnCd": "111", "accomArrvDttm": "20260813090100", "planDptrDttm": "20260813090200", "accomDptrDttm": "20260813090230", "trnClsfNm": "LOCAL"},
+				      {"trnNo": "A0900", "stnCd": "110", "accomArrvDttm": "20260813090200", "planDptrDttm": "20260813090300", "accomDptrDttm": "20260813090330", "trnClsfNm": "LOCAL"}
 				    ]}
 				  }
 				}
@@ -213,9 +213,9 @@ class AirportResponseMapperTest {
 				  "response": {
 				    "header": {"resultCode": "00", "resultMsg": "NORMAL SERVICE."},
 				    "body": {"items": [
-				      {"trnNo": "A0900", "stnCd": "", "accomArrvDttm": "20260813090000", "accomDptrDttm": "20260813090100", "trnClsfNm": "LOCAL"},
-				      {"trnNo": "A0901", "stnCd": "   ", "accomArrvDttm": "20260813090100", "accomDptrDttm": "20260813090200", "trnClsfNm": "LOCAL"},
-				      {"trnNo": "A0902", "stnCd": "110", "accomArrvDttm": "20260813090200", "accomDptrDttm": "20260813090300", "trnClsfNm": "LOCAL"}
+				      {"trnNo": "A0900", "stnCd": "", "accomArrvDttm": "20260813090000", "planDptrDttm": "20260813090100", "accomDptrDttm": "20260813090130", "trnClsfNm": "LOCAL"},
+				      {"trnNo": "A0901", "stnCd": "   ", "accomArrvDttm": "20260813090100", "planDptrDttm": "20260813090200", "accomDptrDttm": "20260813090230", "trnClsfNm": "LOCAL"},
+				      {"trnNo": "A0902", "stnCd": "110", "accomArrvDttm": "20260813090200", "planDptrDttm": "20260813090300", "accomDptrDttm": "20260813090330", "trnClsfNm": "LOCAL"}
 				    ]}
 				  }
 				}

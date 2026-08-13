@@ -30,30 +30,14 @@ public class CollectorPipelineConfiguration {
 	}
 
 	@Bean
-	@ConditionalOnProperty(
-			prefix = "congestion.moving-walkway",
-			name = "enabled",
-			havingValue = "false",
-			matchIfMissing = true
-	)
-	FormulaPendingCongestionCalculator formulaPendingCongestionCalculator(Clock clock) {
-		return new FormulaPendingCongestionCalculator(clock, UUID::randomUUID);
-	}
-
-	@Bean
-	@ConditionalOnProperty(
-			prefix = "congestion.moving-walkway",
-			name = "enabled",
-			havingValue = "true"
-	)
-	MovingWalkwayCongestionCalculator movingWalkwayCongestionCalculator(
+	PlatformCongestionCalculator platformCongestionCalculator(
 			Clock clock,
-			MovingWalkwayProperties properties
+			CongestionCalculationProperties properties
 	) {
-		properties.requiredSensorSpaceId();
-		return new MovingWalkwayCongestionCalculator(
+		return new PlatformCongestionCalculator(
 				clock,
-				UUID::randomUUID
+				UUID::randomUUID,
+				properties
 		);
 	}
 

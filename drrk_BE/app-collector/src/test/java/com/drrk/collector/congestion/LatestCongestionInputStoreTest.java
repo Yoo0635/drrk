@@ -56,7 +56,7 @@ class LatestCongestionInputStoreTest {
 		boolean replaced = store.replaceModelIfNewer(older);
 
 		assertFalse(replaced);
-		assertEquals(latest, store.snapshot().modelMeasurement());
+		assertEquals(List.of(latest), store.snapshot().modelMeasurements());
 	}
 
 	@Test
@@ -84,7 +84,21 @@ class LatestCongestionInputStoreTest {
 
 		assertTrue(store.replaceModelIfNewer(accepted));
 		assertFalse(store.replaceModelIfNewer(other));
-		assertEquals(accepted, store.snapshot().modelMeasurement());
+		assertEquals(List.of(accepted), store.snapshot().modelMeasurements());
+	}
+
+	@Test
+	void keepsChronologicalSensorHistoryForRecentMeasurements() {
+		LatestCongestionInputStore store = new LatestCongestionInputStore("desk01");
+		ModelMeasurementSnapshot first = new ModelMeasurementSnapshot(
+				"m1", Instant.parse("2026-08-13T00:00:00Z"), "desk01", 60, 1);
+		ModelMeasurementSnapshot second = new ModelMeasurementSnapshot(
+				"m2", Instant.parse("2026-08-13T00:01:00Z"), "desk01", 60, 2);
+
+		assertTrue(store.replaceModelIfNewer(first));
+		assertTrue(store.replaceModelIfNewer(second));
+
+		assertEquals(List.of(first, second), store.snapshot().modelMeasurements());
 	}
 
 	private static LatestCongestionInputStore populatedStore(Instant now) {
@@ -92,7 +106,7 @@ class LatestCongestionInputStoreTest {
 		store.replaceArrivalStatus(new ArrivalStatusSnapshot(now, List.of()));
 		store.replacePassengerForecast(new PassengerForecastSnapshot(now, List.of()));
 		store.replaceRailroadOperation(new RailroadOperationSnapshot(now, List.of()));
-		store.replaceModelIfNewer(new ModelMeasurementSnapshot("model-id", now, 1, 0.5));
+		store.replaceModelIfNewer(new ModelMeasurementSnapshot("model-id", now, "", 60, 1));
 		return store;
 	}
 }

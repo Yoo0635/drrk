@@ -32,12 +32,12 @@ class CollectorPipelineConfigurationTest {
 	}
 
 	@Test
-	void createsMovingWalkwayCalculatorWithoutObsoleteRouteConfiguration() {
+	void createsPlatformCongestionCalculatorWithoutLegacyRouteLogic() {
 		contextRunner
 				.withPropertyValues(
 						"congestion.moving-walkway.enabled=true",
 						"congestion.moving-walkway.sensor-space-id=desk01"
 				)
-				.run(context -> assertThat(context).hasSingleBean(MovingWalkwayCongestionCalculator.class));
+				.run(context -> assertThat(context).hasSingleBean(PlatformCongestionCalculator.class));
 	}
 }

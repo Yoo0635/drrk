@@ -2,8 +2,11 @@ import { useEffect, useState } from "react";
 import { createCarrierCountStream } from "../api/carrierCountStream";
 import {
   carrierSnapshotToSample,
+  carrierSnapshotToScoreSample,
   pushCarrierSample,
   type CongestionSample,
+  pushScoreSample,
+  type ScoreSample,
 } from "../carrierSamples";
 import type { CarrierCountConnectionStatus } from "../types/inference";
 
@@ -14,7 +17,8 @@ interface UseCarrierCountSamplesOptions {
 }
 
 interface UseCarrierCountSamplesResult {
-  samples: CongestionSample[];
+  carrierSamples: CongestionSample[];
+  scoreSamples: ScoreSample[];
   connectionStatus: CarrierCountConnectionStatus;
 }
 
@@ -23,7 +27,8 @@ export function useCarrierCountSamples({
   EventSourceCtor,
   now,
 }: UseCarrierCountSamplesOptions = {}): UseCarrierCountSamplesResult {
-  const [samples, setSamples] = useState<CongestionSample[]>([]);
+  const [carrierSamples, setCarrierSamples] = useState<CongestionSample[]>([]);
+  const [scoreSamples, setScoreSamples] = useState<ScoreSample[]>([]);
   const [connectionStatus, setConnectionStatus] =
     useState<CarrierCountConnectionStatus>("connecting");
   const apiBaseUrlConfigured = baseUrl.trim().length > 0;
@@ -36,7 +41,13 @@ export function useCarrierCountSamples({
       onOpen: () => setConnectionStatus("open"),
       onError: () => setConnectionStatus("reconnecting"),
       onSnapshot: (snapshot) => {
-        setSamples((current) => pushCarrierSample(current, carrierSnapshotToSample(snapshot)));
+        setCarrierSamples((current) =>
+          pushCarrierSample(current, carrierSnapshotToSample(snapshot)),
+        );
+        const scoreSample = carrierSnapshotToScoreSample(snapshot);
+        if (scoreSample !== null) {
+          setScoreSamples((current) => pushScoreSample(current, scoreSample));
+        }
       },
     });
 
@@ -48,7 +59,8 @@ export function useCarrierCountSamples({
   }, [baseUrl, EventSourceCtor, now]);
 
   return {
-    samples,
+    carrierSamples,
+    scoreSamples,
     connectionStatus: apiBaseUrlConfigured ? connectionStatus : "unavailable",
   };
 }

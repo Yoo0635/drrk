@@ -2,30 +2,40 @@ package com.drrk.main.consumer.inference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.drrk.main.consumer.congestion.LatestAirportGuideStore;
+import com.drrk.messaging.congestion.CongestionCalculatedMessage;
+import com.drrk.messaging.congestion.CongestionInputReferences;
 import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 class InferenceSseBroadcasterTest {
 
 	private final LatestInferenceSnapshotStore store = new LatestInferenceSnapshotStore();
-	private final InferenceSseBroadcaster broadcaster = new InferenceSseBroadcaster(store, Duration.ofMinutes(30));
+	private final LatestAirportGuideStore airportGuideStore = new LatestAirportGuideStore();
+	private final InferenceSseBroadcaster broadcaster = new InferenceSseBroadcaster(
+			store,
+			airportGuideStore,
+			Duration.ofMinutes(30)
+	);
 
 	@Test
 	void sendsLatestSnapshotsImmediatelyWhenClientSubscribes() {
 		store.updateIfLatest(snapshot("8c530c6c-f819-4ad6-b687-760dc698c617", "desk01", "2026-08-13T05:00:00Z", 3));
 		store.updateIfLatest(snapshot("9d82ae8a-0a67-4540-b519-528386835f80", "desk02", "2026-08-13T05:00:10Z", 1));
+		airportGuideStore.handle(calculatedCongestion("2026-08-13T05:00:15Z"));
 		CapturingEmitter emitter = new CapturingEmitter();
 
 		broadcaster.subscribe(emitter);
 
 		assertThat(emitter.events()).containsExactly(
-				"event:carrier-count\nid:8c530c6c-f819-4ad6-b687-760dc698c617\ndata:{\"space_id\":\"desk01\",\"n_carriers\":3}\n\n",
-				"event:carrier-count\nid:9d82ae8a-0a67-4540-b519-528386835f80\ndata:{\"space_id\":\"desk02\",\"n_carriers\":1}\n\n"
+				"event:carrier-count\nid:8c530c6c-f819-4ad6-b687-760dc698c617\ndata:{\"n_carriers\":3,\"score\":0.25,\"level\":\"LOW\"}\n\n",
+				"event:carrier-count\nid:9d82ae8a-0a67-4540-b519-528386835f80\ndata:{\"n_carriers\":1,\"score\":0.25,\"level\":\"LOW\"}\n\n"
 		);
 	}
 
@@ -38,14 +48,27 @@ class InferenceSseBroadcasterTest {
 		first.clear();
 		second.clear();
 		store.updateIfLatest(snapshot("8c530c6c-f819-4ad6-b687-760dc698c617", "desk01", "2026-08-13T05:00:00Z", 3));
+		airportGuideStore.handle(calculatedCongestion("2026-08-13T05:00:15Z"));
 
 		broadcaster.broadcastLatestSnapshots();
 
 		assertThat(first.events()).containsExactly(
-				"event:carrier-count\nid:8c530c6c-f819-4ad6-b687-760dc698c617\ndata:{\"space_id\":\"desk01\",\"n_carriers\":3}\n\n"
+				"event:carrier-count\nid:8c530c6c-f819-4ad6-b687-760dc698c617\ndata:{\"n_carriers\":3,\"score\":0.25,\"level\":\"LOW\"}\n\n"
 		);
 		assertThat(second.events()).containsExactly(
-				"event:carrier-count\nid:8c530c6c-f819-4ad6-b687-760dc698c617\ndata:{\"space_id\":\"desk01\",\"n_carriers\":3}\n\n"
+				"event:carrier-count\nid:8c530c6c-f819-4ad6-b687-760dc698c617\ndata:{\"n_carriers\":3,\"score\":0.25,\"level\":\"LOW\"}\n\n"
+		);
+	}
+
+	@Test
+	void sendsNullScoreFieldsWhenNoCongestionResultExistsYet() {
+		store.updateIfLatest(snapshot("8c530c6c-f819-4ad6-b687-760dc698c617", "desk01", "2026-08-13T05:00:00Z", 3));
+		CapturingEmitter emitter = new CapturingEmitter();
+
+		broadcaster.subscribe(emitter);
+
+		assertThat(emitter.events()).containsExactly(
+				"event:carrier-count\nid:8c530c6c-f819-4ad6-b687-760dc698c617\ndata:{\"n_carriers\":3,\"score\":null,\"level\":null}\n\n"
 		);
 	}
 
@@ -68,19 +91,45 @@ class InferenceSseBroadcasterTest {
 		broadcaster.subscribe(healthy);
 		healthy.clear();
 		store.updateIfLatest(snapshot("8c530c6c-f819-4ad6-b687-760dc698c617", "desk01", "2026-08-13T05:00:00Z", 3));
+		airportGuideStore.handle(calculatedCongestion("2026-08-13T05:00:15Z"));
 
 		broadcaster.broadcastLatestSnapshots();
 		healthy.clear();
 		broadcaster.broadcastLatestSnapshots();
 
 		assertThat(healthy.events()).containsExactly(
-				"event:carrier-count\nid:8c530c6c-f819-4ad6-b687-760dc698c617\ndata:{\"space_id\":\"desk01\",\"n_carriers\":3}\n\n"
+				"event:carrier-count\nid:8c530c6c-f819-4ad6-b687-760dc698c617\ndata:{\"n_carriers\":3,\"score\":0.25,\"level\":\"LOW\"}\n\n"
 		);
 		assertThat(failing.completed()).isTrue();
 	}
 
 	private static LatestInferenceSnapshot snapshot(String messageId, String spaceId, String endedAt, int carriers) {
 		return new LatestInferenceSnapshot(messageId, spaceId, Instant.parse(endedAt), carriers);
+	}
+
+	private static CongestionCalculatedMessage calculatedCongestion(String calculatedAt) {
+		Instant instant = Instant.parse(calculatedAt);
+		return CongestionCalculatedMessage.calculated(
+				UUID.randomUUID(),
+				instant,
+				"platform-congestion-v1",
+				false,
+				12.0,
+				48L,
+				6.0,
+				instant.minusSeconds(300),
+				List.of(),
+				new CongestionInputReferences(
+						Instant.EPOCH,
+						0,
+						Instant.EPOCH,
+						0,
+						Instant.EPOCH,
+						0,
+						"8c530c6c-f819-4ad6-b687-760dc698c617",
+						Instant.EPOCH
+				)
+		);
 	}
 
 	private static class CapturingEmitter extends SseEmitter {

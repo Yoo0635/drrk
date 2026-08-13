@@ -67,7 +67,7 @@ function ChartRow({ icon, cfg }: { icon: "arr" | "plane"; cfg: ChartCfg }) {
 }
 
 export default function App() {
-  const { samples: carrierSamples, connectionStatus } = useCarrierCountSamples();
+  const { carrierSamples, scoreSamples, connectionStatus } = useCarrierCountSamples();
 
   return (
     <div
@@ -375,7 +375,8 @@ export default function App() {
             }}
           >
             <RealtimeCongestionChart
-              samples={carrierSamples}
+              carrierSamples={carrierSamples}
+              scoreSamples={scoreSamples}
               connectionStatus={connectionStatus}
             />
             <div

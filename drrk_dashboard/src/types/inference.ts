@@ -1,11 +1,13 @@
 export interface CarrierCountEvent {
-  space_id: string;
   n_carriers: number;
+  score: number | null;
+  level: string | null;
 }
 
 export interface CarrierCountSnapshot {
-  spaceId: string;
   carrierCount: number;
+  congestionScore: number | null;
+  congestionLevel: string | null;
   messageId: string;
   receivedAt: Date;
 }
