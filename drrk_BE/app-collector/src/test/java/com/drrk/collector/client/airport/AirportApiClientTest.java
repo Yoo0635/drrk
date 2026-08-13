@@ -89,19 +89,19 @@ class AirportApiClientTest {
 
 	private String arrivalJson() {
 		return """
-				{"response":{"header":{"resultCode":"00","resultMsg":"NORMAL SERVICE."},"body":{"items":[{"terno":"T1","entrygate":"B","flightid":"KE001","estimatedtime":"202608131200"}]}}}
+				{"response":{"header":{"resultCode":"00","resultMsg":"NORMAL SERVICE."},"body":{"items":[{"terno":"T1","entrygate":"B","flightid":"KE001","estimatedtime":"202608131200","korean":"10","foreigner":"4"}]}}}
 				""";
 	}
 
 	private String passengerJson() {
 		return """
-				{"response":{"header":{"resultCode":"00","resultMsg":"NORMAL SERVICE."},"body":{"items":[{"atime":"00_01","t1egsum1":"722.0"}]}}}
+				{"response":{"header":{"resultCode":"00","resultMsg":"NORMAL SERVICE."},"body":{"items":[{"adate":"20260813","atime":"00_01","t1eg1":"722"}]}}}
 				""";
 	}
 
 	private String railroadJson() {
 		return """
-				{"response":{"header":{"resultCode":"00","resultMsg":"NORMAL SERVICE."},"body":{"items":[{"trnNo":"A2002","planArrvDttm":"","planDptrDttm":"20260813050800"}]}}}
+				{"response":{"header":{"resultCode":"00","resultMsg":"NORMAL SERVICE."},"body":{"items":[{"trnNo":"A2002","stnCd":"110","planArrvDttm":"20260813050800","accomArrvDttm":"","trnClsNm":"AREX"}]}}}
 				""";
 	}
 }

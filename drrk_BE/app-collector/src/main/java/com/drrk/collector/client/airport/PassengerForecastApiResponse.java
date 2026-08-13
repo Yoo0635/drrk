@@ -15,6 +15,6 @@ public record PassengerForecastApiResponse(Response response) {
 	}
 
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public record Item(String atime, String t1egsum1) {
+	public record Item(String adate, String atime, String t1eg1) {
 	}
 }

@@ -32,15 +32,16 @@ public class InferenceWindowListener {
 		long deliveryTag = amqpMessage.getMessageProperties().getDeliveryTag();
 		String amqpMessageId = amqpMessage.getMessageProperties().getMessageId();
 		try {
-			ModelMeasurementSnapshot snapshot = parser.parse(new String(amqpMessage.getBody(), UTF_8));
+			ModelMeasurementSnapshot snapshot = parser.parse(new String(amqpMessage.getBody(), UTF_8), amqpMessageId);
 			validateMessageId(amqpMessageId, snapshot.messageId());
 			boolean replaced = store.replaceModelIfNewer(snapshot);
 			channel.basicAck(deliveryTag, false);
 			if (replaced) {
-				log.info("[MODEL RECEIVED] messageId={} measuredAt={}", snapshot.messageId(), snapshot.measuredAt());
+				log.info("[MODEL RECEIVED] messageId={} spaceId={} measuredAt={}",
+						snapshot.messageId(), snapshot.spaceId(), snapshot.measuredAt());
 			} else {
-				log.info("[MODEL IGNORED] messageId={} measuredAt={} reason=NOT_NEWER",
-						snapshot.messageId(), snapshot.measuredAt());
+				log.info("[MODEL IGNORED] messageId={} spaceId={} measuredAt={} reason=NOT_NEWER",
+						snapshot.messageId(), snapshot.spaceId(), snapshot.measuredAt());
 			}
 		} catch (InvalidInferenceMessageException exception) {
 			log.warn("[CONSUME DLQ] source=MODEL messageId={} reason=CONTRACT_ERROR", amqpMessageId);

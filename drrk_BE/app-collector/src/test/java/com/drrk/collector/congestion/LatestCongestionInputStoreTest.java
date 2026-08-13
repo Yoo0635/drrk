@@ -64,14 +64,27 @@ class LatestCongestionInputStoreTest {
 		Instant now = Instant.parse("2026-08-13T00:10:00Z");
 		LatestCongestionInputStore store = populatedStore(now);
 
-		assertTrue(store.snapshot().freshInputs(now, Duration.ofMinutes(10), Duration.ofSeconds(20)).isPresent());
+		assertTrue(store.snapshot().freshInputs(now, Duration.ofMinutes(10), Duration.ofSeconds(10)).isPresent());
 
-		Instant afterModelExpires = now.plusSeconds(21);
+		Instant afterModelExpires = now.plusSeconds(11);
 		assertTrue(
 				store.snapshot()
-						.freshInputs(afterModelExpires, Duration.ofMinutes(10), Duration.ofSeconds(20))
+						.freshInputs(afterModelExpires, Duration.ofMinutes(10), Duration.ofSeconds(10))
 						.isEmpty()
 		);
+	}
+
+	@Test
+	void ignoresMeasurementsFromAnUnconfiguredSensorSpace() {
+		LatestCongestionInputStore store = new LatestCongestionInputStore("desk01");
+		ModelMeasurementSnapshot accepted = new ModelMeasurementSnapshot(
+				"accepted", Instant.parse("2026-08-13T00:00:00Z"), "desk01", 10, 2);
+		ModelMeasurementSnapshot other = new ModelMeasurementSnapshot(
+				"other", Instant.parse("2026-08-13T00:00:01Z"), "desk02", 10, 9);
+
+		assertTrue(store.replaceModelIfNewer(accepted));
+		assertFalse(store.replaceModelIfNewer(other));
+		assertEquals(accepted, store.snapshot().modelMeasurement());
 	}
 
 	private static LatestCongestionInputStore populatedStore(Instant now) {

@@ -15,6 +15,6 @@ public record RailroadOperationApiResponse(Response response) {
 	}
 
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public record Item(String trnNo, String planArrvDttm, String planDptrDttm) {
+	public record Item(String trnNo, String stnCd, String planArrvDttm, String accomArrvDttm, String trnClsNm) {
 	}
 }

@@ -2,6 +2,7 @@ package com.drrk.collector.congestion;
 
 import com.drrk.collector.job.CongestionCalculationJob;
 import com.drrk.collector.publisher.congestion.CongestionMessagePublisher;
+import com.drrk.messaging.congestion.AirportRoute;
 import java.time.Clock;
 import java.util.UUID;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -13,7 +14,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 
 @Configuration(proxyBeanMethods = false)
 @EnableScheduling
-@EnableConfigurationProperties(CongestionCalculationProperties.class)
+@EnableConfigurationProperties({CongestionCalculationProperties.class, MovingWalkwayProperties.class})
 public class CollectorPipelineConfiguration {
 
 	@Bean
@@ -23,13 +24,46 @@ public class CollectorPipelineConfiguration {
 	}
 
 	@Bean
-	LatestCongestionInputStore latestCongestionInputStore() {
-		return new LatestCongestionInputStore();
+	LatestCongestionInputStore latestCongestionInputStore(MovingWalkwayProperties properties) {
+		return properties.isEnabled()
+				? new LatestCongestionInputStore(properties.requiredSensorSpaceId())
+				: new LatestCongestionInputStore();
 	}
 
 	@Bean
-	CongestionCalculator congestionCalculator(Clock clock) {
+	@ConditionalOnProperty(
+			prefix = "congestion.moving-walkway",
+			name = "enabled",
+			havingValue = "false",
+			matchIfMissing = true
+	)
+	FormulaPendingCongestionCalculator formulaPendingCongestionCalculator(Clock clock) {
 		return new FormulaPendingCongestionCalculator(clock, UUID::randomUUID);
+	}
+
+	@Bean
+	@ConditionalOnProperty(
+			prefix = "congestion.moving-walkway",
+			name = "enabled",
+			havingValue = "true"
+	)
+	MovingWalkwayCongestionCalculator movingWalkwayCongestionCalculator(
+			Clock clock,
+			MovingWalkwayProperties properties
+	) {
+		double carriersPerPassenger = properties.requiredCarriersPerPassenger();
+		if (!Double.isFinite(carriersPerPassenger) || carriersPerPassenger <= 0) {
+			throw new IllegalArgumentException(
+					"requiredCarriersPerPassenger must be a finite positive value, got: " + carriersPerPassenger
+			);
+		}
+		return new MovingWalkwayCongestionCalculator(
+				clock,
+				UUID::randomUUID,
+				carriersPerPassenger,
+				properties.routeDefinition(AirportRoute.B),
+				properties.routeDefinition(AirportRoute.C)
+		);
 	}
 
 	@Bean

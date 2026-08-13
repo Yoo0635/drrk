@@ -1,7 +1,9 @@
 package com.drrk.collector.consumer.inference;
 
 import com.drrk.collector.congestion.ModelMeasurementSnapshot;
+import java.time.DateTimeException;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
@@ -15,71 +17,104 @@ public class InferenceWindowMessageParser {
 	}
 
 	public ModelMeasurementSnapshot parse(String payload) {
+		return parse(payload, null);
+	}
+
+	public ModelMeasurementSnapshot parse(String payload, String fallbackMessageId) {
 		InferenceWindowMessage message;
 		try {
 			message = objectMapper.readValue(payload, InferenceWindowMessage.class);
-		} catch (JacksonException | IllegalArgumentException exception) {
+		} catch (JacksonException | IllegalArgumentException | NullPointerException exception) {
 			throw new InvalidInferenceMessageException("Invalid model JSON", exception);
 		}
 		if (message == null) {
 			throw new InvalidInferenceMessageException("Model message must not be null");
 		}
+		String messageId = resolveMessageId(message.messageId(), fallbackMessageId);
 		validate(message);
 		return new ModelMeasurementSnapshot(
-				message.messageId(),
+				messageId,
 				toInstant(message.ts()),
-				message.carrierCount(),
-				message.intensity()
+				message.spaceId(),
+				message.windowSec(),
+				message.carrierCount()
 		);
 	}
 
 	private void validate(InferenceWindowMessage message) {
-		UUID messageId;
-		try {
-			messageId = UUID.fromString(message.messageId());
-		} catch (RuntimeException exception) {
-			throw new InvalidInferenceMessageException("message_id must be UUID v4", exception);
-		}
-		if (messageId.version() != 4) {
-			throw new InvalidInferenceMessageException("message_id must be UUID v4");
-		}
 		if (message.spaceId() == null || message.spaceId().isBlank()) {
 			throw new InvalidInferenceMessageException("space_id must not be blank");
 		}
-		if (message.windowSec() != 10) {
+		if (message.windowSec() == null || message.windowSec() != 10) {
 			throw new InvalidInferenceMessageException("window_sec must be 10");
 		}
-		if (!Double.isFinite(message.ts()) || message.ts() <= 0) {
-			throw new InvalidInferenceMessageException("ts must be a positive finite epoch second");
+		if (message.ts() == null || !Double.isFinite(message.ts())) {
+			throw new InvalidInferenceMessageException("ts must be finite");
 		}
-		if (message.eventCount() != message.events().size()) {
-			throw new InvalidInferenceMessageException("n_events must match events size");
+		try {
+			toInstant(message.ts());
+		} catch (DateTimeException exception) {
+			throw new InvalidInferenceMessageException("ts must be a valid timestamp", exception);
 		}
-		message.events().forEach(this::validateEvent);
-		int derivedCarrierCount = message.events().stream().mapToInt(InferenceEvent::count).sum();
+		if (message.carrierCount() == null || message.carrierCount() < 0) {
+			throw new InvalidInferenceMessageException("n_carriers must be non-negative");
+		}
+		List<InferenceEvent> events = message.events();
+		if (events == null) {
+			throw new InvalidInferenceMessageException("events must not be null");
+		}
+		events.forEach(event -> validateEvent(event, message.ts(), message.windowSec()));
+		long derivedCarrierCount;
+		try {
+			derivedCarrierCount = events.stream()
+					.mapToLong(InferenceEvent::count)
+					.reduce(0L, Math::addExact);
+		} catch (ArithmeticException exception) {
+			throw new InvalidInferenceMessageException("event counts overflow", exception);
+		}
 		if (message.carrierCount() != derivedCarrierCount) {
 			throw new InvalidInferenceMessageException("n_carriers must match event counts");
 		}
-		if (!Double.isFinite(message.intensity()) || message.intensity() < 0 || message.intensity() > 1) {
-			throw new InvalidInferenceMessageException("intensity must be between 0 and 1");
-		}
 	}
 
-	private void validateEvent(InferenceEvent event) {
-		if (!Double.isFinite(event.t()) || event.t() <= 0) {
-			throw new InvalidInferenceMessageException("event.t must be a positive finite epoch second");
+	private String resolveMessageId(String jsonMessageId, String fallbackMessageId) {
+		if (jsonMessageId != null && !jsonMessageId.isBlank()) {
+			return validUuidV4(jsonMessageId, "message_id must be UUID v4");
 		}
-		if (!Double.isFinite(event.dur()) || event.dur() <= 0) {
+		return validUuidV4(fallbackMessageId, "fallback message_id must be UUID v4");
+	}
+
+	private String validUuidV4(String value, String message) {
+		UUID messageId;
+		try {
+			messageId = UUID.fromString(value);
+		} catch (RuntimeException exception) {
+			throw new InvalidInferenceMessageException(message, exception);
+		}
+		if (messageId.version() != 4) {
+			throw new InvalidInferenceMessageException(message);
+		}
+		return value;
+	}
+
+	private void validateEvent(InferenceEvent event, double ts, int windowSec) {
+		if (event == null) {
+			throw new InvalidInferenceMessageException("events must not contain null");
+		}
+		if (event.t() == null || !Double.isFinite(event.t()) || event.t() < ts - windowSec || event.t() > ts) {
+			throw new InvalidInferenceMessageException("event.t must be finite and within the measurement window");
+		}
+		if (event.dur() == null || !Double.isFinite(event.dur()) || event.dur() <= 0) {
 			throw new InvalidInferenceMessageException("event.dur must be positive and finite");
 		}
-		if (event.count() < 0) {
+		if (event.dur() > windowSec) {
+			throw new InvalidInferenceMessageException("event.dur must not be longer than window_sec");
+		}
+		if (event.count() == null || event.count() < 0) {
 			throw new InvalidInferenceMessageException("event.count must be non-negative");
 		}
-		if (!Double.isFinite(event.conf()) || event.conf() < 0 || event.conf() > 1) {
+		if (event.conf() == null || !Double.isFinite(event.conf()) || event.conf() < 0 || event.conf() > 1) {
 			throw new InvalidInferenceMessageException("event.conf must be between 0 and 1");
-		}
-		if (!Double.isFinite(event.snr())) {
-			throw new InvalidInferenceMessageException("event.snr must be finite");
 		}
 	}
 
