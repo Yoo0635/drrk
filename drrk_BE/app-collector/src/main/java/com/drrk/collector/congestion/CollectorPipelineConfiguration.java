@@ -2,7 +2,6 @@ package com.drrk.collector.congestion;
 
 import com.drrk.collector.job.CongestionCalculationJob;
 import com.drrk.collector.publisher.congestion.CongestionMessagePublisher;
-import com.drrk.messaging.congestion.AirportRoute;
 import java.time.Clock;
 import java.util.UUID;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -51,18 +50,10 @@ public class CollectorPipelineConfiguration {
 			Clock clock,
 			MovingWalkwayProperties properties
 	) {
-		double carriersPerPassenger = properties.requiredCarriersPerPassenger();
-		if (!Double.isFinite(carriersPerPassenger) || carriersPerPassenger <= 0) {
-			throw new IllegalArgumentException(
-					"requiredCarriersPerPassenger must be a finite positive value, got: " + carriersPerPassenger
-			);
-		}
+		properties.requiredSensorSpaceId();
 		return new MovingWalkwayCongestionCalculator(
 				clock,
-				UUID::randomUUID,
-				carriersPerPassenger,
-				properties.routeDefinition(AirportRoute.B),
-				properties.routeDefinition(AirportRoute.C)
+				UUID::randomUUID
 		);
 	}
 

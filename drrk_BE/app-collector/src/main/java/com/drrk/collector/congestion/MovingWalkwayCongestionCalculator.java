@@ -7,6 +7,7 @@ import com.drrk.messaging.congestion.MovingWalkwayStatus;
 import com.drrk.messaging.congestion.RailroadArrivalResult;
 import com.drrk.messaging.congestion.RailroadArrivalStatus;
 import com.drrk.messaging.congestion.RouteCongestionResult;
+import com.drrk.messaging.congestion.RouteStatus;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -15,7 +16,6 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.Comparator;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
@@ -24,7 +24,11 @@ import java.util.function.Supplier;
 public class MovingWalkwayCongestionCalculator implements CongestionCalculator {
 
 	static final double CAPACITY = 4.2;
-	private static final double FORECAST_WINDOW_SECONDS = 3_600d;
+	private static final long ROUTE_A_TOTAL_TRAVEL_TIME_SECONDS = 509;
+	private static final long ROUTE_B_CLEAR_PASSAGE_TIME_SECONDS = 46;
+	private static final long ROUTE_B_CONGESTED_PASSAGE_TIME_SECONDS = 110;
+	private static final long ROUTE_B_FIXED_TRAVEL_TIME_SECONDS = 370;
+	private static final long ROUTE_C_TOTAL_TRAVEL_TIME_SECONDS = 434;
 	private static final ZoneId AIRPORT_ZONE = ZoneId.of("Asia/Seoul");
 	private static final DateTimeFormatter MINUTE_FORMAT = DateTimeFormatter.ofPattern("yyyyMMddHHmm");
 	private static final DateTimeFormatter SECOND_FORMAT = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
@@ -32,35 +36,22 @@ public class MovingWalkwayCongestionCalculator implements CongestionCalculator {
 
 	private final Clock clock;
 	private final Supplier<UUID> messageIdSupplier;
-	private final double carriersPerPassenger;
-	private final List<MovingWalkwayRouteDefinition> routes;
 
-	public MovingWalkwayCongestionCalculator(
-			Clock clock,
-			Supplier<UUID> messageIdSupplier,
-			double carriersPerPassenger,
-			MovingWalkwayRouteDefinition routeB,
-			MovingWalkwayRouteDefinition routeC
-	) {
+	public MovingWalkwayCongestionCalculator(Clock clock, Supplier<UUID> messageIdSupplier) {
 		this.clock = Objects.requireNonNull(clock, "clock");
 		this.messageIdSupplier = Objects.requireNonNull(messageIdSupplier, "messageIdSupplier");
-		if (!Double.isFinite(carriersPerPassenger) || carriersPerPassenger < 0) {
-			throw new IllegalArgumentException("carriersPerPassenger must be finite and non-negative");
-		}
-		this.carriersPerPassenger = carriersPerPassenger;
-		this.routes = List.of(
-				requireRoute(routeB, AirportRoute.B),
-				requireRoute(routeC, AirportRoute.C)
-		);
 	}
 
 	@Override
 	public CongestionCalculatedMessage calculate(CongestionInputs inputs) {
 		Objects.requireNonNull(inputs, "inputs");
 		Instant calculatedAt = clock.instant();
-		List<RouteCongestionResult> routeResults = routes.stream()
-				.map(route -> calculateRoute(route, inputs, calculatedAt))
-				.toList();
+		boolean sensorDetected = inputs.modelMeasurement().carrierCount() > 0;
+		List<RouteCongestionResult> routeResults = List.of(
+				fixedRoute(AirportRoute.A, calculatedAt, ROUTE_A_TOTAL_TRAVEL_TIME_SECONDS),
+				routeB(calculatedAt, inputs.modelMeasurement().carrierCount(), sensorDetected),
+				fixedRoute(AirportRoute.C, calculatedAt, ROUTE_C_TOTAL_TRAVEL_TIME_SECONDS)
+		);
 		RouteCongestionResult recommended = routeResults.stream()
 				.min(Comparator.comparingLong(RouteCongestionResult::totalTravelTimeSeconds)
 						.thenComparing(RouteCongestionResult::route))
@@ -69,7 +60,8 @@ public class MovingWalkwayCongestionCalculator implements CongestionCalculator {
 		return CongestionCalculatedMessage.calculated(
 				messageIdSupplier.get(),
 				calculatedAt,
-				"moving-walkway-v1",
+				"moving-walkway-v2",
+				sensorDetected,
 				routeResults,
 				recommended.route(),
 				mapRailroadArrivals(inputs.railroadOperation().items(), calculatedAt),
@@ -77,97 +69,53 @@ public class MovingWalkwayCongestionCalculator implements CongestionCalculator {
 		);
 	}
 
-	private RouteCongestionResult calculateRoute(
-			MovingWalkwayRouteDefinition route,
-			CongestionInputs inputs,
-			Instant calculatedAt
+	private RouteCongestionResult fixedRoute(AirportRoute route, Instant calculatedAt, long totalTravelTimeSeconds) {
+		return routeResult(
+				route,
+				calculatedAt,
+				0,
+				RouteStatus.CLEAR,
+				0,
+				totalTravelTimeSeconds
+		);
+	}
+
+	private RouteCongestionResult routeB(Instant calculatedAt, long carrierCount, boolean sensorDetected) {
+		long passageTimeSeconds = sensorDetected
+				? ROUTE_B_CONGESTED_PASSAGE_TIME_SECONDS
+				: ROUTE_B_CLEAR_PASSAGE_TIME_SECONDS;
+		return routeResult(
+				AirportRoute.B,
+				calculatedAt,
+				carrierCount,
+				sensorDetected ? RouteStatus.CONGESTED : RouteStatus.CLEAR,
+				passageTimeSeconds,
+				ROUTE_B_FIXED_TRAVEL_TIME_SECONDS + passageTimeSeconds
+		);
+	}
+
+	private RouteCongestionResult routeResult(
+			AirportRoute route,
+			Instant calculatedAt,
+			double stay,
+			RouteStatus status,
+			long passageTimeSeconds,
+			long totalTravelTimeSeconds
 	) {
-		long delta = route.walkwayArrivalOffsetSeconds();
-		Instant walkwayArrival = calculatedAt.plusSeconds(delta);
-		double measuredCarriers = inputs.modelMeasurement().carrierCount();
-		double stay = Math.max(0d, 1d - (double) delta / route.retentionLengthSeconds()) * measuredCarriers;
-		double incoming = route.split()
-				* estimatedFlightCarriers(inputs.arrivalStatus().items(), walkwayArrival);
-		double inflowPerSecond = forecastInflowPerSecond(inputs.passengerForecast().items(), walkwayArrival);
-		double residual = route.split() * inflowPerSecond * delta;
-		double load = stay + incoming + residual;
-		double volumeCapacityRatio = load / CAPACITY;
-		MovingWalkwayStatus status = MovingWalkwayStatus.fromVolumeCapacityRatio(volumeCapacityRatio);
-		long passageTime = status == MovingWalkwayStatus.CONGESTED
-				? route.congestedPassageTimeSeconds()
-				: route.availablePassageTimeSeconds();
-		long totalTravelTime = Math.addExact(
-				Math.addExact(delta, passageTime),
-				route.remainingTravelTimeSeconds()
-		);
-
+		double volumeCapacityRatio = stay / CAPACITY;
 		return new RouteCongestionResult(
-				route.route(),
-				walkwayArrival,
+				route,
+				calculatedAt,
 				stay,
-				incoming,
-				residual,
-				load,
+				0,
+				0,
+				stay,
 				volumeCapacityRatio,
+				MovingWalkwayStatus.fromVolumeCapacityRatio(volumeCapacityRatio),
 				status,
-				passageTime,
-				totalTravelTime
+				passageTimeSeconds,
+				totalTravelTimeSeconds
 		);
-	}
-
-	private double estimatedFlightCarriers(List<ArrivalStatusItem> items, Instant walkwayArrival) {
-		HashSet<String> flightIds = new HashSet<>();
-		long passengers = items.stream()
-				.filter(item -> appliesAt(item.effectiveArrivalTime(), walkwayArrival))
-				.filter(item -> flightIds.add(item.flightId()))
-				.mapToLong(item -> Math.addExact(item.koreanPassengerCount(), item.foreignPassengerCount()))
-				.sum();
-		return passengers * carriersPerPassenger;
-	}
-
-	private boolean appliesAt(String airportDateTime, Instant target) {
-		Instant arrival = parseAirportTime(airportDateTime);
-		if (arrival == null) {
-			return false;
-		}
-		ZonedDateTime localArrival = arrival.atZone(AIRPORT_ZONE);
-		ZonedDateTime localTarget = target.atZone(AIRPORT_ZONE);
-		return localArrival.toLocalDate().equals(localTarget.toLocalDate())
-				&& localArrival.getHour() == localTarget.getHour();
-	}
-
-	private double forecastInflowPerSecond(List<PassengerForecastItem> items, Instant walkwayArrival) {
-		long passengers = items.stream()
-				.filter(item -> appliesAt(item, walkwayArrival))
-				.mapToLong(PassengerForecastItem::expectedPassengerCount)
-				.sum();
-		return passengers * carriersPerPassenger / FORECAST_WINDOW_SECONDS;
-	}
-
-	private boolean appliesAt(PassengerForecastItem item, Instant target) {
-		ZonedDateTime localTarget = target.atZone(AIRPORT_ZONE);
-		String expectedDate = localTarget.toLocalDate().format(DateTimeFormatter.BASIC_ISO_DATE);
-		if (item.date() != null && !digits(item.date()).equals(expectedDate)) {
-			return false;
-		}
-		if (item.timeSlot() == null || item.timeSlot().isBlank()) {
-			return true;
-		}
-		if (item.timeSlot().contains("_")) {
-			String[] range = item.timeSlot().split("_", -1);
-			String startHour = range.length == 2 ? digits(range[0]) : "";
-			return startHour.length() == 2 && localTarget.getHour() == Integer.parseInt(startHour);
-		}
-		String timeDigits = digits(item.timeSlot());
-		if (timeDigits.length() >= 4) {
-			int hour = Integer.parseInt(timeDigits.substring(0, 2));
-			int minute = Integer.parseInt(timeDigits.substring(2, 4));
-			return localTarget.getHour() == hour && localTarget.getMinute() >= minute;
-		}
-		if (timeDigits.length() == 2) {
-			return localTarget.getHour() == Integer.parseInt(timeDigits);
-		}
-		return false;
 	}
 
 	private List<RailroadArrivalResult> mapRailroadArrivals(
@@ -246,16 +194,5 @@ public class MovingWalkwayCongestionCalculator implements CongestionCalculator {
 
 	private String digits(String value) {
 		return value.replaceAll("[^0-9]", "");
-	}
-
-	private static MovingWalkwayRouteDefinition requireRoute(
-			MovingWalkwayRouteDefinition route,
-			AirportRoute expected
-	) {
-		Objects.requireNonNull(route, "route");
-		if (route.route() != expected) {
-			throw new IllegalArgumentException("Expected route " + expected);
-		}
-		return route;
 	}
 }
