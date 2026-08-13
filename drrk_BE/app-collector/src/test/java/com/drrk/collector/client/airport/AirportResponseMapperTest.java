@@ -153,7 +153,33 @@ class AirportResponseMapperTest {
 
 		RailroadOperationSnapshot snapshot = new RailroadOperationMapper().map(response, collectedAt);
 
-		assertEquals(List.of("A0900", "A0901", "A0902", "A0903", "A0904"), snapshot.items().stream()
+		assertEquals(List.of("A0859", "A0900", "A0901", "A0902", "A0903"), snapshot.items().stream()
+				.map(RailroadOperationItem::trainNumber)
+				.toList());
+	}
+
+	@Test
+	void railroadMapperKeepsLatestPastTrainForCongestionBaseline() throws Exception {
+		RailroadOperationApiResponse response = objectMapper.readValue("""
+				{
+				  "response": {
+				    "header": {"resultCode": "00", "resultMsg": "NORMAL SERVICE."},
+				    "body": {"items": [
+				      {"trnNo":"A0858","stnCd":"110","accomArrvDttm":"20260813085800","planDptrDttm":"20260813085900","accomDptrDttm":"20260813085930","trnClsfNm":"LOCAL"},
+				      {"trnNo":"A0859","stnCd":"110","accomArrvDttm":"20260813085930","planDptrDttm":"20260813090030","accomDptrDttm":"20260813090100","trnClsfNm":"LOCAL"},
+				      {"trnNo":"A0900","stnCd":"110","accomArrvDttm":"20260813090000","planDptrDttm":"20260813090100","accomDptrDttm":"20260813090130","trnClsfNm":"LOCAL"},
+				      {"trnNo":"A0901","stnCd":"110","accomArrvDttm":"20260813090100","planDptrDttm":"20260813090200","accomDptrDttm":"20260813090230","trnClsfNm":"LOCAL"},
+				      {"trnNo":"A0902","stnCd":"110","accomArrvDttm":"20260813090200","planDptrDttm":"20260813090300","accomDptrDttm":"20260813090330","trnClsfNm":"LOCAL"},
+				      {"trnNo":"A0903","stnCd":"110","accomArrvDttm":"20260813090300","planDptrDttm":"20260813090400","accomDptrDttm":"20260813090430","trnClsfNm":"LOCAL"},
+				      {"trnNo":"A0904","stnCd":"110","accomArrvDttm":"20260813090400","planDptrDttm":"20260813090500","accomDptrDttm":"20260813090530","trnClsfNm":"LOCAL"}
+				    ]}
+				  }
+				}
+				""", RailroadOperationApiResponse.class);
+
+		RailroadOperationSnapshot snapshot = new RailroadOperationMapper().map(response, collectedAt);
+
+		assertEquals(List.of("A0859", "A0900", "A0901", "A0902", "A0903"), snapshot.items().stream()
 				.map(RailroadOperationItem::trainNumber)
 				.toList());
 	}

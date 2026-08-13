@@ -2,7 +2,6 @@ package com.drrk.main.consumer.congestion;
 
 import com.drrk.messaging.congestion.CongestionCalculatedMessage;
 import com.drrk.messaging.congestion.CongestionCalculationStatus;
-import java.time.Instant;
 import java.util.UUID;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
@@ -51,7 +50,7 @@ public class CongestionCalculatedMessageParser {
 		if (message.status() == CongestionCalculationStatus.CALCULATED) {
 			validateCalculated(message);
 		}
-		validateUuidV4(message.inputs().modelMessageId(), "inputs.modelMessageId");
+		validateModelMessageId(message.inputs().modelMessageId());
 	}
 
 	private void validateCalculated(CongestionCalculatedMessage message) {
@@ -93,6 +92,12 @@ public class CongestionCalculatedMessageParser {
 			}
 		} catch (IllegalArgumentException | NullPointerException exception) {
 			throw new InvalidCongestionMessageException(field + " must be UUID v4", exception);
+		}
+	}
+
+	private void validateModelMessageId(String value) {
+		if (value == null || value.isBlank()) {
+			throw new InvalidCongestionMessageException("inputs.modelMessageId must not be blank");
 		}
 	}
 

@@ -26,6 +26,18 @@ class CongestionCalculatedMessageParserTest {
 	}
 
 	@Test
+	void acceptsNonUuidModelMessageIdFromInferencePipeline() {
+		CongestionCalculatedMessage message = parser.parse(
+				validJson().replace(
+						"\"modelMessageId\": \"468c59d4-3b22-44e1-91ed-67b6290fa4a9\"",
+						"\"modelMessageId\": \"desk01:1786645389.4\""
+				)
+		);
+
+		assertThat(message.inputs().modelMessageId()).isEqualTo("desk01:1786645389.4");
+	}
+
+	@Test
 	void rejectsUnsupportedSchemaVersion() {
 		String invalid = validJson().replace("\"schemaVersion\": \"4.0\"", "\"schemaVersion\": \"3.0\"");
 
