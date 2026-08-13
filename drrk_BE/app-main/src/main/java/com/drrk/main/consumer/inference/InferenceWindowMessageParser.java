@@ -1,7 +1,6 @@
 package com.drrk.main.consumer.inference;
 
 import java.util.Set;
-import java.util.UUID;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -28,10 +27,15 @@ public class InferenceWindowMessageParser {
 	}
 
 	public InferenceWindowMessage parse(String payload) {
+		return parse(payload, null);
+	}
+
+	public InferenceWindowMessage parse(String payload, String fallbackMessageId) {
 		try {
 			JsonNode root = objectMapper.readTree(payload);
 			validateRoot(root);
 			InferenceWindowMessage message = objectMapper.treeToValue(root, InferenceWindowMessage.class);
+			message = withResolvedMessageId(message, fallbackMessageId);
 			validateMessage(message);
 			return message;
 		} catch (InvalidInferenceMessageException exception) {
@@ -41,12 +45,47 @@ public class InferenceWindowMessageParser {
 		}
 	}
 
+	private static InferenceWindowMessage withResolvedMessageId(
+			InferenceWindowMessage message,
+			String fallbackMessageId
+	) {
+		String messageId = resolveMessageId(message.messageId(), fallbackMessageId);
+		return new InferenceWindowMessage(
+				messageId,
+				message.spaceId(),
+				message.ts(),
+				message.windowSec(),
+				message.events(),
+				message.nEvents(),
+				message.nCarriers(),
+				message.intensity(),
+				message.countEst()
+		);
+	}
+
+	private static String resolveMessageId(String jsonMessageId, String fallbackMessageId) {
+		boolean hasJsonMessageId = jsonMessageId != null && !jsonMessageId.isBlank();
+		boolean hasFallbackMessageId = fallbackMessageId != null && !fallbackMessageId.isBlank();
+		if (hasJsonMessageId && hasFallbackMessageId && !jsonMessageId.equals(fallbackMessageId)) {
+			throw invalid("AMQP messageId must match JSON message_id");
+		}
+		if (hasJsonMessageId) {
+			return jsonMessageId;
+		}
+		if (hasFallbackMessageId) {
+			return fallbackMessageId;
+		}
+		throw invalid("message_id must not be blank");
+	}
+
 	private static void validateRoot(JsonNode root) {
 		if (root == null || !root.isObject()) {
 			throw invalid("root must be an object");
 		}
-		validateFields(root, MESSAGE_FIELDS, "message fields");
-		requireText(root, "message_id");
+		validateMessageFields(root);
+		if (root.has("message_id")) {
+			requireText(root, "message_id");
+		}
 		requireText(root, "space_id");
 		requireNumber(root, "ts");
 		requireInteger(root, "window_sec");
@@ -75,9 +114,8 @@ public class InferenceWindowMessageParser {
 	}
 
 	private static void validateMessage(InferenceWindowMessage message) {
-		UUID messageId = UUID.fromString(message.messageId());
-		if (messageId.version() != 4) {
-			throw invalid("message_id must be UUID v4");
+		if (message.messageId().isBlank()) {
+			throw invalid("message_id must not be blank");
 		}
 		if (message.spaceId().isBlank()) {
 			throw invalid("space_id must not be blank");
@@ -118,6 +156,18 @@ public class InferenceWindowMessageParser {
 		Set<String> actual = Set.copyOf(node.propertyNames());
 		if (!actual.equals(expected)) {
 			throw invalid(label + " must be exactly " + expected);
+		}
+	}
+
+	private static void validateMessageFields(JsonNode root) {
+		Set<String> actual = Set.copyOf(root.propertyNames());
+		if (actual.equals(MESSAGE_FIELDS)) {
+			return;
+		}
+		Set<String> withoutMessageId = new java.util.HashSet<>(MESSAGE_FIELDS);
+		withoutMessageId.remove("message_id");
+		if (!actual.equals(withoutMessageId)) {
+			throw invalid("message fields must be exactly " + MESSAGE_FIELDS + " or " + withoutMessageId);
 		}
 	}
 

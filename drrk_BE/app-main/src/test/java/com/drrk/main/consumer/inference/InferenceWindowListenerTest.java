@@ -28,6 +28,7 @@ import tools.jackson.databind.json.JsonMapper;
 class InferenceWindowListenerTest {
 
 	private static final String MESSAGE_ID = "8c530c6c-f819-4ad6-b687-760dc698c617";
+	private static final String MODEL_MESSAGE_ID = "desk01:1786634462.6";
 	private static final long DELIVERY_TAG = 42L;
 	private static final String VALID_PAYLOAD = """
 			{
@@ -87,6 +88,24 @@ class InferenceWindowListenerTest {
 		verify(channel).basicAck(DELIVERY_TAG, false);
 		verify(channel, never()).basicReject(DELIVERY_TAG, false);
 		assertThat(latestSnapshotStore.findAll()).isEmpty();
+	}
+
+	@Test
+	void storesMessageWithModelStyleAmqpMessageIdWhenJsonMessageIdIsMissing() throws Exception {
+		String payload = VALID_PAYLOAD.replace(
+				"  \"message_id\": \"8c530c6c-f819-4ad6-b687-760dc698c617\",%n".formatted(),
+				""
+		);
+		when(ingestionService.ingest(any(InferenceWindowMessage.class), eq(payload)))
+				.thenReturn(InferenceIngestionResult.STORED);
+
+		listener.consume(message(payload, MODEL_MESSAGE_ID), channel);
+
+		verify(channel).basicAck(DELIVERY_TAG, false);
+		verify(channel, never()).basicReject(DELIVERY_TAG, false);
+		assertThat(latestSnapshotStore.findAll())
+				.extracting(LatestInferenceSnapshot::messageId, LatestInferenceSnapshot::spaceId)
+				.containsExactly(org.assertj.core.groups.Tuple.tuple(MODEL_MESSAGE_ID, "desk01"));
 	}
 
 	@Test
