@@ -13,6 +13,7 @@ on:
           - diagnose-collector
           - inject-model-data
           - set-env
+          - aws-probe
       count:
         description: "inject-model-data: number of messages"
         required: false
@@ -53,8 +54,22 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: AWS probe (runner-side, no SSM)
+        if: ${{ github.event.inputs.action == 'aws-probe' }}
+        run: |
+          set +e
+          echo "== identity =="; aws sts get-caller-identity
+          echo "== cloudfront distributions =="
+          aws cloudfront list-distributions --query "DistributionList.Items[].{Id:Id,Domain:DomainName,Aliases:Aliases.Items,Origins:Origins.Items[].DomainName}" --output json
+          echo "== s3 buckets =="; aws s3 ls
+          echo "== route53 zones =="; aws route53 list-hosted-zones --query "HostedZones[].Name" --output json
+          echo "== ec2 (drrk) =="
+          aws ec2 describe-instances --query "Reservations[].Instances[].{Id:InstanceId,PublicIp:PublicIpAddress,PrivateIp:PrivateIpAddress,State:State.Name,Name:Tags[?Key=='Name']|[0].Value}" --output json
+          exit 0
+
       - name: Build ops script
         id: build
+        if: ${{ github.event.inputs.action != 'aws-probe' }}
         run: |
           set -euo pipefail
           ACTION="${{ github.event.inputs.action }}"
@@ -107,6 +122,7 @@ jobs:
           cat /tmp/ops.sh
 
       - name: Send SSM command and print output
+        if: ${{ github.event.inputs.action != 'aws-probe' }}
         run: |
           set -euo pipefail
           INSTANCE_ID="${{ steps.build.outputs.instance }}"
