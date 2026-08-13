@@ -31,9 +31,10 @@ class CongestionMessageContractTest {
 		);
 
 		assertEquals("35c9ef91-9f68-4fda-833f-90fa54c25816", message.messageId());
-		assertEquals("2.0", message.schemaVersion());
+		assertEquals("3.0", message.schemaVersion());
 		assertEquals("formula-pending-v0", message.calculationVersion());
 		assertEquals(CongestionCalculationStatus.FORMULA_PENDING, message.status());
+		assertEquals(false, message.sensorDetected());
 		assertNull(message.score());
 		assertNull(message.level());
 		assertEquals(inputs, message.inputs());
@@ -57,8 +58,21 @@ class CongestionMessageContractTest {
 	}
 
 	@Test
-	void createsCalculatedGuideWithTwoRoutesAndRailroadArrivals() {
+	void createsCalculatedGuideWithAllAirportRoutesAndSensorDetection() {
 		CongestionInputReferences inputs = inputs();
+		RouteCongestionResult routeA = new RouteCongestionResult(
+				AirportRoute.A,
+				Instant.parse("2026-08-13T05:00:20Z"),
+				0.0,
+				0.0,
+				0.0,
+				0.0,
+				0.0,
+				MovingWalkwayStatus.AVAILABLE,
+				RouteStatus.CLEAR,
+				30,
+				90
+		);
 		RouteCongestionResult routeB = new RouteCongestionResult(
 				AirportRoute.B,
 				Instant.parse("2026-08-13T05:00:30Z"),
@@ -68,6 +82,7 @@ class CongestionMessageContractTest {
 				3.5,
 				3.5 / 4.2,
 				MovingWalkwayStatus.NORMAL,
+				RouteStatus.CONGESTED,
 				20,
 				80
 		);
@@ -80,6 +95,7 @@ class CongestionMessageContractTest {
 				6.0,
 				6.0 / 4.2,
 				MovingWalkwayStatus.CONGESTED,
+				RouteStatus.CLEAR,
 				50,
 				110
 		);
@@ -95,19 +111,27 @@ class CongestionMessageContractTest {
 				UUID.fromString("35c9ef91-9f68-4fda-833f-90fa54c25816"),
 				Instant.parse("2026-08-13T05:00:00Z"),
 				"moving-walkway-v1",
-				List.of(routeB, routeC),
+				true,
+				List.of(routeA, routeB, routeC),
 				AirportRoute.B,
 				List.of(train),
 				inputs
 		);
 
-		assertEquals("2.0", message.schemaVersion());
+		assertEquals("3.0", message.schemaVersion());
 		assertEquals(CongestionCalculationStatus.CALCULATED, message.status());
-		assertEquals(List.of(routeB, routeC), message.routeResults());
+		assertEquals(true, message.sensorDetected());
+		assertEquals(List.of(routeA, routeB, routeC), message.routeResults());
 		assertEquals(AirportRoute.B, message.recommendedRoute());
 		assertEquals(List.of(train), message.railroadArrivals());
 		assertEquals(routeB.volumeCapacityRatio(), message.score());
 		assertEquals("NORMAL", message.level());
+	}
+
+	@Test
+	void exposesAirportRoutesAndDemoStatusesInStableOrder() {
+		assertEquals(List.of(AirportRoute.A, AirportRoute.B, AirportRoute.C), List.of(AirportRoute.values()));
+		assertEquals(List.of(RouteStatus.CLEAR, RouteStatus.CONGESTED), List.of(RouteStatus.values()));
 	}
 
 	@Test
@@ -121,6 +145,7 @@ class CongestionMessageContractTest {
 				3.36,
 				0.8,
 				MovingWalkwayStatus.NORMAL,
+				RouteStatus.CLEAR,
 				20,
 				80
 		);
@@ -129,7 +154,7 @@ class CongestionMessageContractTest {
 	}
 
 	@Test
-	void rejectsRecommendedRouteThatIsMissingFromResults() {
+	void rejectsCalculatedResultsThatDoNotContainAllAirportRoutes() {
 		RouteCongestionResult routeB = new RouteCongestionResult(
 				AirportRoute.B,
 				Instant.EPOCH,
@@ -139,6 +164,7 @@ class CongestionMessageContractTest {
 				0,
 				0,
 				MovingWalkwayStatus.AVAILABLE,
+				RouteStatus.CLEAR,
 				1,
 				1
 		);
@@ -147,8 +173,9 @@ class CongestionMessageContractTest {
 				UUID.randomUUID(),
 				Instant.EPOCH,
 				"moving-walkway-v1",
+				false,
 				List.of(routeB),
-				AirportRoute.C,
+				AirportRoute.B,
 				List.of(),
 				inputs()
 		));
