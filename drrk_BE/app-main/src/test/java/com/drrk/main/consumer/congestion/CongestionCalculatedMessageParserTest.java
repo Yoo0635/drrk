@@ -69,6 +69,21 @@ class CongestionCalculatedMessageParserTest {
 	}
 
 	@Test
+	void rejectsDetectedMessageWhenRouteAOrCIsCongested() {
+		String detectedWithCongestedA = calculatedJson()
+				.replaceFirst("\"status\":\"CLEAR\"", "\"status\":\"CONGESTED\"");
+		String detectedWithCongestedC = calculatedJson().replaceFirst(
+				"(\"route\":\"C\"[^}]*\"status\":)\"CLEAR\"",
+				"$1\"CONGESTED\""
+		);
+
+		assertThatThrownBy(() -> parser.parse(detectedWithCongestedA))
+				.isInstanceOf(InvalidCongestionMessageException.class);
+		assertThatThrownBy(() -> parser.parse(detectedWithCongestedC))
+				.isInstanceOf(InvalidCongestionMessageException.class);
+	}
+
+	@Test
 	void rejectsFormulaPendingMessageWithInventedScore() {
 		String invalid = validJson().replace("\"score\": null", "\"score\": 42.0");
 
@@ -77,16 +92,19 @@ class CongestionCalculatedMessageParserTest {
 	}
 
 	@Test
-	void rejectsCalculatedMessageWithInconsistentFormulaOrRecommendation() {
+	void rejectsCalculatedMessageWithInconsistentFormulaOrNonShortestRecommendation() {
 		String invalidLoad = calculatedJson().replace("\"load\":3", "\"load\":4");
-		String invalidRecommendation = calculatedJson().replace(
+		String nonShortestRecommendation = calculatedJson().replace(
 				"\"recommendedRoute\": \"C\"",
 				"\"recommendedRoute\": \"B\""
-		);
+		).replace(
+				"\"score\": 1.4285714285714286",
+				"\"score\": 0.7142857142857143"
+		).replace("\"level\": \"CONGESTED\"", "\"level\": \"NORMAL\"");
 
 		assertThatThrownBy(() -> parser.parse(invalidLoad))
 				.isInstanceOf(InvalidCongestionMessageException.class);
-		assertThatThrownBy(() -> parser.parse(invalidRecommendation))
+		assertThatThrownBy(() -> parser.parse(nonShortestRecommendation))
 				.isInstanceOf(InvalidCongestionMessageException.class);
 	}
 
