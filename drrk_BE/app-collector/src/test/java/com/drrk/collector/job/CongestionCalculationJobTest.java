@@ -21,10 +21,12 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 
@@ -42,8 +44,18 @@ class CongestionCalculationJobTest {
 			publisher,
 			Clock.fixed(NOW, ZoneOffset.UTC),
 			Duration.ofMinutes(10),
-			Duration.ofSeconds(10)
+			Duration.ofSeconds(5)
 	);
+
+	@Test
+	void usesFiveSecondDefaultSchedulerIntervalForJetsonModelUpdates() throws NoSuchMethodException {
+		Scheduled scheduled = CongestionCalculationJob.class
+				.getMethod("calculateAndPublish")
+				.getAnnotation(Scheduled.class);
+
+		Assertions.assertEquals("${congestion.calculation.fixed-rate:PT5S}", scheduled.fixedRateString());
+		Assertions.assertEquals("${congestion.calculation.initial-delay:PT5S}", scheduled.initialDelayString());
+	}
 
 	@Test
 	void calculatesAndPublishesWhenEveryInputIsFresh() {
@@ -69,7 +81,7 @@ class CongestionCalculationJobTest {
 	@Test
 	void skipsCalculationWhenModelMeasurementIsStale() {
 		storeAirportInputs();
-		store.replaceModelIfNewer(new ModelMeasurementSnapshot("model-stale", NOW.minusSeconds(11), 1, 0.1));
+		store.replaceModelIfNewer(new ModelMeasurementSnapshot("model-stale", NOW.minusSeconds(6), 1, 0.1));
 
 		job.calculateAndPublish();
 
@@ -102,7 +114,7 @@ class CongestionCalculationJobTest {
 
 	private void storeFreshInputs() {
 		storeAirportInputs();
-		store.replaceModelIfNewer(new ModelMeasurementSnapshot("model-1", NOW.minusSeconds(10), 3, 0.42));
+		store.replaceModelIfNewer(new ModelMeasurementSnapshot("model-1", NOW.minusSeconds(5), 3, 0.42));
 	}
 
 	private void storeAirportInputs() {
