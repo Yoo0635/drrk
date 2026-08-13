@@ -48,4 +48,5 @@ inference:
     auto-startup: ${INFERENCE_CONSUMER_AUTO_STARTUP:true}
   stream:
     fixed-rate: ${INFERENCE_STREAM_FIXED_RATE:PT5S}
+    snapshot-max-age: ${INFERENCE_STREAM_SNAPSHOT_MAX_AGE:PT5S}
     emitter-timeout: ${INFERENCE_STREAM_EMITTER_TIMEOUT:PT30M}

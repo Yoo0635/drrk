@@ -2,7 +2,9 @@ package com.drrk.main.consumer.inference;
 
 import com.drrk.main.consumer.congestion.LatestAirportGuideStore;
 import java.io.IOException;
+import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -25,6 +27,8 @@ public class InferenceSseBroadcaster {
 	private final LatestInferenceSnapshotStore store;
 	private final LatestAirportGuideStore airportGuideStore;
 	private final ObjectMapper objectMapper;
+	private final Clock clock;
+	private final Duration snapshotMaxAge;
 	private final Duration emitterTimeout;
 	private final Set<SseEmitter> emitters = ConcurrentHashMap.newKeySet();
 
@@ -33,20 +37,26 @@ public class InferenceSseBroadcaster {
 			LatestInferenceSnapshotStore store,
 			LatestAirportGuideStore airportGuideStore,
 			ObjectMapper objectMapper,
+			Clock clock,
+			@Value("${inference.stream.snapshot-max-age:PT5S}") Duration snapshotMaxAge,
 			@Value("${inference.stream.emitter-timeout:PT30M}") Duration emitterTimeout
 	) {
 		this.store = store;
 		this.airportGuideStore = airportGuideStore;
 		this.objectMapper = objectMapper;
+		this.clock = clock;
+		this.snapshotMaxAge = snapshotMaxAge;
 		this.emitterTimeout = emitterTimeout;
 	}
 
 	InferenceSseBroadcaster(
 			LatestInferenceSnapshotStore store,
 			LatestAirportGuideStore airportGuideStore,
+			Clock clock,
+			Duration snapshotMaxAge,
 			Duration emitterTimeout
 	) {
-		this(store, airportGuideStore, new ObjectMapper(), emitterTimeout);
+		this(store, airportGuideStore, new ObjectMapper(), clock, snapshotMaxAge, emitterTimeout);
 	}
 
 	public SseEmitter subscribe() {
@@ -64,7 +74,7 @@ public class InferenceSseBroadcaster {
 
 	@Scheduled(fixedRateString = "${inference.stream.fixed-rate:PT5S}")
 	public void broadcastLatestSnapshots() {
-		List<LatestInferenceSnapshot> snapshots = store.findAll();
+		List<LatestInferenceSnapshot> snapshots = currentSnapshots();
 		for (SseEmitter emitter : List.copyOf(emitters)) {
 			if (snapshots.isEmpty()) {
 				sendHeartbeat(emitter);
@@ -75,7 +85,7 @@ public class InferenceSseBroadcaster {
 	}
 
 	private void sendCurrentState(SseEmitter emitter) {
-		List<LatestInferenceSnapshot> snapshots = store.findAll();
+		List<LatestInferenceSnapshot> snapshots = currentSnapshots();
 		if (snapshots.isEmpty()) {
 			return;
 		}
@@ -106,8 +116,12 @@ public class InferenceSseBroadcaster {
 		}
 	}
 
+	private List<LatestInferenceSnapshot> currentSnapshots() {
+		return store.findAllFresh(now(), snapshotMaxAge);
+	}
+
 	private String toJson(LatestInferenceSnapshot snapshot) {
-		var latestGuide = airportGuideStore.latest().orElse(null);
+		var latestGuide = airportGuideStore.latestFresh(now(), snapshotMaxAge).orElse(null);
 		try {
 			return objectMapper.writeValueAsString(
 					new CarrierCountStreamResponse(
@@ -119,6 +133,10 @@ public class InferenceSseBroadcaster {
 		} catch (JacksonException exception) {
 			throw new IllegalStateException("failed to serialize carrier count SSE payload", exception);
 		}
+	}
+
+	private Instant now() {
+		return clock.instant();
 	}
 
 	private void removeAndComplete(SseEmitter emitter) {

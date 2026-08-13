@@ -6,8 +6,10 @@ import com.drrk.main.consumer.congestion.LatestAirportGuideStore;
 import com.drrk.main.consumer.inference.InferenceSseBroadcaster;
 import com.drrk.main.consumer.inference.LatestInferenceSnapshot;
 import com.drrk.main.consumer.inference.LatestInferenceSnapshotStore;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
@@ -24,12 +26,14 @@ class InferenceStreamControllerTest {
 	@BeforeEach
 	void setUp() {
 		store = new LatestInferenceSnapshotStore();
-		InferenceSseBroadcaster broadcaster = new InferenceSseBroadcaster(
-				store,
-				new LatestAirportGuideStore(),
-				new ObjectMapper(),
-				Duration.ofMinutes(30)
-		);
+			InferenceSseBroadcaster broadcaster = new InferenceSseBroadcaster(
+					store,
+					new LatestAirportGuideStore(),
+					new ObjectMapper(),
+					Clock.fixed(Instant.parse("2026-08-13T05:00:04Z"), ZoneOffset.UTC),
+					Duration.ofSeconds(5),
+					Duration.ofMinutes(30)
+			);
 		controller = new InferenceStreamController(broadcaster);
 	}
 

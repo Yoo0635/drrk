@@ -1,5 +1,7 @@
 package com.drrk.main.consumer.inference;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
@@ -24,5 +26,16 @@ public class LatestInferenceSnapshotStore {
 		return latestBySpace.values().stream()
 				.sorted(Comparator.comparing(LatestInferenceSnapshot::spaceId))
 				.toList();
+	}
+
+	public List<LatestInferenceSnapshot> findAllFresh(Instant now, Duration maxAge) {
+		return latestBySpace.values().stream()
+				.filter(snapshot -> isFresh(snapshot.windowEndedAt(), now, maxAge))
+				.sorted(Comparator.comparing(LatestInferenceSnapshot::spaceId))
+				.toList();
+	}
+
+	private static boolean isFresh(Instant timestamp, Instant now, Duration maxAge) {
+		return !timestamp.isAfter(now) && Duration.between(timestamp, now).compareTo(maxAge) <= 0;
 	}
 }
