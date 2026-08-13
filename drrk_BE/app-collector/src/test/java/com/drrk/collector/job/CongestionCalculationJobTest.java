@@ -42,7 +42,7 @@ class CongestionCalculationJobTest {
 			publisher,
 			Clock.fixed(NOW, ZoneOffset.UTC),
 			Duration.ofMinutes(10),
-			Duration.ofSeconds(20)
+			Duration.ofSeconds(10)
 	);
 
 	@Test
@@ -69,7 +69,7 @@ class CongestionCalculationJobTest {
 	@Test
 	void skipsCalculationWhenModelMeasurementIsStale() {
 		storeAirportInputs();
-		store.replaceModelIfNewer(new ModelMeasurementSnapshot("model-stale", NOW.minusSeconds(21), 1, 0.1));
+		store.replaceModelIfNewer(new ModelMeasurementSnapshot("model-stale", NOW.minusSeconds(11), 1, 0.1));
 
 		job.calculateAndPublish();
 

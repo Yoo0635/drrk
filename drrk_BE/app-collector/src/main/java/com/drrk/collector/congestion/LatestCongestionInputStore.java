@@ -4,8 +4,17 @@ import java.util.concurrent.atomic.AtomicReference;
 
 public class LatestCongestionInputStore {
 
+	private final String acceptedSensorSpaceId;
 	private final AtomicReference<CongestionInputState> state =
 			new AtomicReference<>(CongestionInputState.empty());
+
+	public LatestCongestionInputStore() {
+		this(null);
+	}
+
+	public LatestCongestionInputStore(String acceptedSensorSpaceId) {
+		this.acceptedSensorSpaceId = acceptedSensorSpaceId;
+	}
 
 	public void replaceArrivalStatus(ArrivalStatusSnapshot snapshot) {
 		state.updateAndGet(current -> current.withArrivalStatus(snapshot));
@@ -20,6 +29,9 @@ public class LatestCongestionInputStore {
 	}
 
 	public boolean replaceModelIfNewer(ModelMeasurementSnapshot snapshot) {
+		if (acceptedSensorSpaceId != null && !acceptedSensorSpaceId.equals(snapshot.spaceId())) {
+			return false;
+		}
 		while (true) {
 			CongestionInputState current = state.get();
 			ModelMeasurementSnapshot existing = current.modelMeasurement();
