@@ -10,14 +10,12 @@ import java.util.Optional;
 public class PassengerForecastMapper {
 
 	public PassengerForecastSnapshot map(PassengerForecastApiResponse apiResponse, Instant collectedAt) {
-		apiResponse.response().header().requireSuccess();
-		List<PassengerForecastApiResponse.Item> items = apiResponse.response().body() == null
-				|| apiResponse.response().body().items() == null
-				? List.of()
-				: apiResponse.response().body().items().item();
-		if (items == null) {
-			items = List.of();
+		AirportApiHeader header = apiResponse.effectiveHeader();
+		if (header == null) {
+			throw new AirportApiResponseException("MISSING_HEADER", "승객예고 응답에 header가 없습니다");
 		}
+		header.requireSuccess();
+		List<PassengerForecastApiResponse.Item> items = apiResponse.items();
 		List<PassengerForecastItem> selected = items.stream()
 				.filter(Objects::nonNull)
 				.map(this::mapItem)

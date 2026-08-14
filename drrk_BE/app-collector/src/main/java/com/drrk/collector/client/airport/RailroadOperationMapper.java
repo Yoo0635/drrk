@@ -14,6 +14,9 @@ public class RailroadOperationMapper {
 	private static final int MAX_UPCOMING_ITEMS = 5;
 
 	public RailroadOperationSnapshot map(RailroadOperationApiResponse apiResponse, Instant collectedAt) {
+		if (apiResponse.response() == null || apiResponse.response().header() == null) {
+			throw new AirportApiResponseException("MISSING_HEADER", "운행정보 응답에 header가 없습니다");
+		}
 		apiResponse.response().header().requireSuccess();
 		List<RailroadOperationApiResponse.Item> items = apiResponse.response().body() == null
 				|| apiResponse.response().body().items() == null

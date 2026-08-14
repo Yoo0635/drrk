@@ -40,7 +40,8 @@ public class CongestionResultListener {
 			message = parser.parse(new String(amqpMessage.getBody(), UTF_8));
 			validateMessageId(amqpMessageId, message.messageId());
 		} catch (InvalidCongestionMessageException exception) {
-			log.warn("[CONSUME DLQ] messageId={} reason=CONTRACT_ERROR", amqpMessageId);
+			log.warn("[CONSUME DLQ] messageId={} reason=CONTRACT_ERROR detail={}",
+					amqpMessageId, exception.getMessage());
 			channel.basicReject(deliveryTag, false);
 			return;
 		}

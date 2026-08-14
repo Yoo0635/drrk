@@ -19,6 +19,8 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * 승강장 혼잡도 공식 v2.
@@ -38,6 +40,8 @@ import java.util.function.Supplier;
  * 예보층이 필요한데 사용 가능한 항공편 데이터가 없으면 NO_FLIGHT_DATA(실측층만 산출)이다.</p>
  */
 public class PlatformCongestionCalculator implements CongestionCalculator {
+
+	private static final Logger log = LoggerFactory.getLogger(PlatformCongestionCalculator.class);
 
 	private static final ZoneId AIRPORT_ZONE = ZoneId.of("Asia/Seoul");
 	private static final DateTimeFormatter MINUTE_FORMAT = DateTimeFormatter.ofPattern("yyyyMMddHHmm");
@@ -62,14 +66,17 @@ public class PlatformCongestionCalculator implements CongestionCalculator {
 	public CongestionCalculatedMessage calculate(CongestionInputs inputs) {
 		Objects.requireNonNull(inputs, "inputs");
 		Instant now = clock.instant();
-		Optional<Instant> lastDeparture = lastDepartureBeforeNow(inputs.railroadOperation().items(), now);
-		Optional<Instant> nextArrival = nextArrivalAfterNow(inputs.railroadOperation().items(), now);
-		if (lastDeparture.isEmpty() || nextArrival.isEmpty()) {
+		List<RailroadOperationItem> railroadItems = inputs.railroadOperation().items();
+		Optional<Instant> nextArrival = nextArrivalAfterNow(railroadItems, now);
+		if (nextArrival.isEmpty()) {
+			// 다음 열차가 없다 = 막차 이후~첫차 이전이거나 스케줄 자체가 없다 → 혼잡도 미산출
+			log.info("[CONGESTION NO_SERVICE] reason=NO_UPCOMING_TRAIN railroadItemCount={}", railroadItems.size());
 			return CongestionCalculatedMessage.noService(messageIdSupplier.get(), now, inputReferences(inputs));
 		}
 
-		Instant windowStart = lastDeparture.orElseThrow();
 		Instant windowEnd = nextArrival.orElseThrow();
+		WindowStart resolvedStart = resolveWindowStart(railroadItems, now, windowEnd);
+		Instant windowStart = resolvedStart.value();
 		Duration walk = Duration.ofMinutes(properties.getWalkMinutes());
 		Instant sensorWindowStart = windowStart.minus(walk);
 		Instant sensorWindowEnd = windowEnd.minus(walk);
@@ -88,8 +95,12 @@ public class PlatformCongestionCalculator implements CongestionCalculator {
 			}
 		}
 
-		List<RailroadArrivalResult> railroadArrivals = mapRailroadArrivals(inputs.railroadOperation().items(), now);
+		List<RailroadArrivalResult> railroadArrivals = mapRailroadArrivals(railroadItems, now);
 		CongestionInputReferences references = inputReferences(inputs);
+		log.info("[CONGESTION WINDOW] windowStart={} source={} windowEnd={} measuredLoad={} forecastLoad={} "
+						+ "forecastRequired={} flightCount={}",
+				windowStart, resolvedStart.source(), windowEnd, measuredLoad, forecastLoad,
+				forecastRequired, inputs.arrivalStatus().items().size());
 		if (flightDataMissing) {
 			return CongestionCalculatedMessage.noFlightData(
 					messageIdSupplier.get(),
@@ -211,12 +222,31 @@ public class PlatformCongestionCalculator implements CongestionCalculator {
 				.toList();
 	}
 
-	private Optional<Instant> lastDepartureBeforeNow(List<RailroadOperationItem> items, Instant now) {
-		return items.stream()
+	/**
+	 * T_prev(승강장이 마지막으로 비워진 시점) 결정. 운행정보 API가 출발시각을 비워 보내는
+	 * 경우가 있어 3단 폴백을 둔다 — 이 값이 없다고 혼잡도를 통째로 버리지 않기 위함이다.
+	 */
+	private WindowStart resolveWindowStart(List<RailroadOperationItem> items, Instant now, Instant windowEnd) {
+		Optional<Instant> departure = items.stream()
 				.map(this::effectiveDepartureTime)
 				.flatMap(Optional::stream)
-				.filter(departure -> !departure.isAfter(now))
+				.filter(value -> !value.isAfter(now))
 				.max(Comparator.naturalOrder());
+		if (departure.isPresent()) {
+			return new WindowStart(departure.orElseThrow(), "DEPARTURE");
+		}
+
+		Optional<Instant> pastArrival = items.stream()
+				.map(item -> parseAirportTime(item.scheduledArrivalTime()))
+				.flatMap(Optional::stream)
+				.filter(value -> !value.isAfter(now))
+				.max(Comparator.naturalOrder());
+		if (pastArrival.isPresent()) {
+			return new WindowStart(pastArrival.orElseThrow(), "PAST_ARRIVAL");
+		}
+
+		Instant headwayStart = windowEnd.minus(Duration.ofMinutes(properties.getDefaultHeadwayMinutes()));
+		return new WindowStart(minOf(headwayStart, now), "HEADWAY_FALLBACK");
 	}
 
 	private Optional<Instant> nextArrivalAfterNow(List<RailroadOperationItem> items, Instant now) {
@@ -307,6 +337,12 @@ public class PlatformCongestionCalculator implements CongestionCalculator {
 				latestMeasurement.messageId(),
 				latestMeasurement.measuredAt()
 		);
+	}
+
+	/**
+	 * 누적 창 시작점과 그 근거 (진단 로그용).
+	 */
+	private record WindowStart(Instant value, String source) {
 	}
 
 	/**

@@ -39,6 +39,10 @@ public class InferenceWindowListener {
 			if (replaced) {
 				log.info("[MODEL RECEIVED] messageId={} spaceId={} measuredAt={}",
 						snapshot.messageId(), snapshot.spaceId(), snapshot.measuredAt());
+			} else if (!store.accepts(snapshot.spaceId())) {
+				log.warn("[MODEL IGNORED] messageId={} spaceId={} reason=SPACE_ID_MISMATCH expected={} "
+								+ "hint=CONGESTION_SENSOR_SPACE_ID 값을 확인하세요",
+						snapshot.messageId(), snapshot.spaceId(), store.acceptedSensorSpaceId());
 			} else {
 				log.info("[MODEL IGNORED] messageId={} spaceId={} measuredAt={} reason=NOT_NEWER",
 						snapshot.messageId(), snapshot.spaceId(), snapshot.measuredAt());

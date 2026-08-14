@@ -10,6 +10,7 @@ public class CongestionCalculationProperties {
 	private Duration modelMaxAge = Duration.ofSeconds(5);
 	private long trainCapacity = 48;
 	private int walkMinutes = 10;
+	private int defaultHeadwayMinutes = 15;
 	private int exitDelayMinMinutes = 45;
 	private int exitDelayMaxMinutes = 90;
 	private double rK = 0.09;
@@ -47,6 +48,14 @@ public class CongestionCalculationProperties {
 
 	public void setWalkMinutes(int walkMinutes) {
 		this.walkMinutes = walkMinutes;
+	}
+
+	public int getDefaultHeadwayMinutes() {
+		return defaultHeadwayMinutes;
+	}
+
+	public void setDefaultHeadwayMinutes(int defaultHeadwayMinutes) {
+		this.defaultHeadwayMinutes = defaultHeadwayMinutes;
 	}
 
 	public int getExitDelayMinMinutes() {

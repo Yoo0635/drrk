@@ -95,18 +95,40 @@ class PlatformCongestionCalculatorTest {
 	}
 
 	@Test
-	void returnsNoServiceWhenNoDepartedTrainExistsYet() {
+	void fallsBackToDefaultHeadwayWhenApiOmitsDepartureTimes() {
+		// 운행정보 API가 출발시각을 비워 보내도 혼잡도를 버리지 않는다:
+		// T_prev를 T_next − 기본 배차 간격(15분)으로 근사 → 13:50, 센서 창 (13:40, 13:55]
 		CongestionCalculatedMessage result = calculator().calculate(new CongestionInputs(
 				new ArrivalStatusSnapshot(NOW.minusSeconds(60), List.of()),
 				new PassengerForecastSnapshot(NOW.minusSeconds(60), List.of()),
 				new RailroadOperationSnapshot(NOW.minusSeconds(60), List.of(
-						new RailroadOperationItem("A0901", "110", "20260813140500", null, "20260813140500", null, "일반")
+						new RailroadOperationItem("A0901", "110", "20260813140500", null, null, null, "일반")
 				)),
 				List.of(new ModelMeasurementSnapshot("m1", Instant.parse("2026-08-13T04:49:00Z"), "desk01", 60, 7))
 		));
 
-		assertEquals(CongestionCalculationStatus.NO_SERVICE, result.status());
+		assertEquals(CongestionCalculationStatus.CALCULATED, result.status());
 		assertEquals("platform-congestion-v2", result.calculationVersion());
+		assertEquals(7.0, result.currentLoad());
+		assertEquals(Instant.parse("2026-08-13T04:50:00Z"), result.lastTrainDepartureAt());
+		assertEquals(7.0 / 48.0, result.score(), 1.0e-9);
+	}
+
+	@Test
+	void fallsBackToPastArrivalWhenOnlyArrivalTimesExist() {
+		// 출발시각은 없지만 직전 열차 도착시각이 있으면 그 시점을 승강장이 비워진 시점으로 본다
+		CongestionCalculatedMessage result = calculator().calculate(new CongestionInputs(
+				new ArrivalStatusSnapshot(NOW.minusSeconds(60), List.of()),
+				new PassengerForecastSnapshot(NOW.minusSeconds(60), List.of()),
+				new RailroadOperationSnapshot(NOW.minusSeconds(60), List.of(
+						new RailroadOperationItem("A0900", "110", "20260813135500", null, null, null, "일반"),
+						new RailroadOperationItem("A0901", "110", "20260813140500", null, null, null, "일반")
+				)),
+				List.of(new ModelMeasurementSnapshot("m1", Instant.parse("2026-08-13T04:49:00Z"), "desk01", 60, 7))
+		));
+
+		assertEquals(CongestionCalculationStatus.CALCULATED, result.status());
+		assertEquals(Instant.parse("2026-08-13T04:55:00Z"), result.lastTrainDepartureAt());
 	}
 
 	@Test

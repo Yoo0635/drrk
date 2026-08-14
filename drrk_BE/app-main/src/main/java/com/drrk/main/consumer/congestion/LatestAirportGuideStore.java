@@ -29,6 +29,9 @@ public class LatestAirportGuideStore implements CongestionResultHandler {
 						message.score(),
 						message.railroadArrivals().size());
 			}
+		} else {
+			log.info("[AIRPORT GUIDE SKIPPED] status={} calculatedAt={} reason=NO_SCORE_IN_MESSAGE",
+					message.status(), message.calculatedAt());
 		}
 	}
 

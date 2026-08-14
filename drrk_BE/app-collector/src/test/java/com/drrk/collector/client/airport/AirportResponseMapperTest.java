@@ -49,7 +49,7 @@ class AirportResponseMapperTest {
 	}
 
 	@Test
-	void arrivalMapperKeepsCurrentAndNextFiveFlightsOrderedByEstimatedTime() throws Exception {
+	void arrivalMapperKeepsRecentAndUpcomingFlightsOrderedByEstimatedTime() throws Exception {
 		ArrivalStatusApiResponse response = objectMapper.readValue("""
 				{
 				  "response": {
@@ -71,13 +71,108 @@ class AirportResponseMapperTest {
 
 		ArrivalStatusSnapshot snapshot = new ArrivalStatusMapper().map(response, collectedAt);
 
-		assertEquals(List.of(
-				new ArrivalStatusItem("C", "KE0900", "202608130900", 0, 0),
-				new ArrivalStatusItem("C", "KE0901", "202608130901", 1, 0),
-				new ArrivalStatusItem("B", "KE0902", "202608130902", 2, 0),
-				new ArrivalStatusItem("C", "KE0903", "202608130903", 3, 0),
-				new ArrivalStatusItem("B", "KE0904", "202608130904", 4, 0)
-		), snapshot.items());
+		// v2 예보층은 이미 착륙한 편(KE0859)도 필요하므로 과거 도착편까지 시간순으로 남긴다
+		assertEquals(
+				List.of("KE0859", "KE0900", "KE0901", "KE0902", "KE0903", "KE0904", "KE0905", "KE0906", "KE0907"),
+				snapshot.items().stream().map(ArrivalStatusItem::flightId).toList()
+		);
+	}
+
+	@Test
+	void passengerMapperAcceptsRealResponseWithoutResponseWrapper() throws Exception {
+		// 승객예고 API는 다른 두 API와 달리 response 래퍼 없이 header/body를 최상위로 내려준다.
+		PassengerForecastApiResponse response = objectMapper.readValue("""
+				{
+				  "header": {"resultCode": "00", "resultMsg": "NORMAL SERVICE."},
+				  "body": {
+				    "items": {"item": [
+				      {"adate": "20260812", "atime": "14_15", "t1eg1": "120", "t1eg2": "85", "t1eg3": "60",
+				       "t1eg4": "75", "t1egsum1": "340", "t2eg1": "90", "t2eg2": "110", "t2egsum1": "200"}
+				    ]},
+				    "numOfRows": "24", "pageNo": "1", "totalCount": "24"
+				  }
+				}
+				""", PassengerForecastApiResponse.class);
+
+		PassengerForecastSnapshot snapshot = new PassengerForecastMapper().map(response, collectedAt);
+
+		assertEquals(List.of(new PassengerForecastItem("20260812", "14_15", 120)), snapshot.items());
+	}
+
+	@Test
+	void passengerMapperFailsLoudlyWhenHeaderIsMissing() throws Exception {
+		PassengerForecastApiResponse response = objectMapper.readValue(
+				"{\"body\": {\"items\": {\"item\": []}}}", PassengerForecastApiResponse.class);
+
+		assertThrows(AirportApiResponseException.class,
+				() -> new PassengerForecastMapper().map(response, collectedAt));
+	}
+
+	@Test
+	void arrivalMapperAcceptsRealResponseWithDecimalPassengerCounts() throws Exception {
+		// 입국장현황 API는 승객 수를 "120.0" 처럼 소수점 문자열로 내려준다.
+		ArrivalStatusApiResponse response = objectMapper.readValue("""
+				{
+				  "response": {
+				    "header": {"resultCode": "00", "resultMsg": "NORMAL SERVICE."},
+				    "body": {"items": {"item": [
+				      {"airport": "FRA", "flightid": "OZ542", "terno": "T1", "entrygate": "B", "gatenumber": "15",
+				       "scheduletime": "202608130115", "estimatedtime": "202608130134",
+				       "korean": "120.0", "foreigner": "46.0"}
+				    ]}, "numOfRows": "10", "pageNo": "1", "totalCount": "35"}
+				  }
+				}
+				""", ArrivalStatusApiResponse.class);
+
+		ArrivalStatusSnapshot snapshot = new ArrivalStatusMapper().map(response, collectedAt);
+
+		assertEquals(
+				List.of(new ArrivalStatusItem("B", "OZ542", "202608130134", 120, 46)),
+				snapshot.items()
+		);
+	}
+
+	@Test
+	void arrivalMapperFallsBackToScheduleTimeWhenEstimatedTimeIsBlank() throws Exception {
+		ArrivalStatusApiResponse response = objectMapper.readValue("""
+				{
+				  "response": {
+				    "header": {"resultCode": "00", "resultMsg": "NORMAL SERVICE."},
+				    "body": {"items": {"item": [
+				      {"terno": "T1", "entrygate": "C", "flightid": "KE100", "estimatedtime": "",
+				       "scheduletime": "202608130140", "korean": "30.0", "foreigner": "10.0"}
+				    ]}}
+				  }
+				}
+				""", ArrivalStatusApiResponse.class);
+
+		ArrivalStatusSnapshot snapshot = new ArrivalStatusMapper().map(response, collectedAt);
+
+		assertEquals(
+				List.of(new ArrivalStatusItem("C", "KE100", "202608130140", 30, 10)),
+				snapshot.items()
+		);
+	}
+
+	@Test
+	void arrivalMapperKeepsAlreadyLandedFlightsForForecastLayer() throws Exception {
+		// 착륙 후 45~90분 뒤 출구를 통과하므로, 이미 도착한 편이 예보층의 핵심 입력이다.
+		ArrivalStatusApiResponse response = objectMapper.readValue("""
+				{
+				  "response": {
+				    "header": {"resultCode": "00", "resultMsg": "NORMAL SERVICE."},
+				    "body": {"items": {"item": [
+				      {"terno":"T1","entrygate":"B","flightid":"PAST","estimatedtime":"202608130800","korean":"50.0","foreigner":"20.0"},
+				      {"terno":"T1","entrygate":"B","flightid":"TOO_OLD","estimatedtime":"202608130400","korean":"50.0","foreigner":"20.0"}
+				    ]}}
+				  }
+				}
+				""", ArrivalStatusApiResponse.class);
+
+		// collectedAt = 2026-08-13T00:00:00Z = 09:00 KST → PAST(08:00 KST)는 1시간 전, TOO_OLD(04:00 KST)는 5시간 전
+		ArrivalStatusSnapshot snapshot = new ArrivalStatusMapper().map(response, collectedAt);
+
+		assertEquals(List.of("PAST"), snapshot.items().stream().map(ArrivalStatusItem::flightId).toList());
 	}
 
 	@Test

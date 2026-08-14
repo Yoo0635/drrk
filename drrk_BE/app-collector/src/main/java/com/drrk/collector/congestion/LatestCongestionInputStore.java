@@ -32,8 +32,20 @@ public class LatestCongestionInputStore {
 		state.updateAndGet(current -> current.withRailroadOperation(snapshot));
 	}
 
+	/**
+	 * 이 저장소가 받아들이는 센서 space_id인지 여부. 불일치를 조용히 버리지 않고
+	 * 호출부가 구분해 로깅할 수 있게 공개한다.
+	 */
+	public boolean accepts(String spaceId) {
+		return acceptedSensorSpaceId == null || acceptedSensorSpaceId.equals(spaceId);
+	}
+
+	public String acceptedSensorSpaceId() {
+		return acceptedSensorSpaceId;
+	}
+
 	public boolean replaceModelIfNewer(ModelMeasurementSnapshot snapshot) {
-		if (acceptedSensorSpaceId != null && !acceptedSensorSpaceId.equals(snapshot.spaceId())) {
+		if (!accepts(snapshot.spaceId())) {
 			return false;
 		}
 		while (true) {
