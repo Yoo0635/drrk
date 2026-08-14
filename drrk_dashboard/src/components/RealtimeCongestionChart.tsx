@@ -44,7 +44,7 @@ function levelColor(level: string) {
     case "FULL":
       return C.red;
     case "HIGH":
-      return C.orange;
+      return C.red;
     case "MEDIUM":
       return C.yellow;
     case "LOW":
