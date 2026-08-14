@@ -60,7 +60,41 @@ class LatestCongestionInputStoreTest {
 	}
 
 	@Test
-	void exposesInputsOnlyWhenEverySnapshotIsFresh() {
+	void substitutesEmptySnapshotsWhenAirportApisAreUnavailable() {
+		// 외부 API 장애가 계측 기반 서비스를 멈추지 않아야 한다: 모델 계측만 있으면 계산은 진행한다.
+		Instant now = Instant.parse("2026-08-13T00:10:00Z");
+		LatestCongestionInputStore store = new LatestCongestionInputStore();
+		store.replaceModelIfNewer(new ModelMeasurementSnapshot("model-id", now, "", 60, 1));
+
+		CongestionInputs inputs = store.snapshot()
+				.freshInputs(now, Duration.ofMinutes(10), Duration.ofSeconds(10))
+				.orElseThrow();
+
+		assertTrue(inputs.arrivalStatus().items().isEmpty());
+		assertTrue(inputs.passengerForecast().items().isEmpty());
+		assertTrue(inputs.railroadOperation().items().isEmpty());
+		assertEquals(1, inputs.modelMeasurements().size());
+	}
+
+	@Test
+	void dropsStaleApiSnapshotsButKeepsCalculating() {
+		Instant collected = Instant.parse("2026-08-13T00:00:00Z");
+		Instant now = collected.plus(Duration.ofMinutes(30));
+		LatestCongestionInputStore store = new LatestCongestionInputStore();
+		store.replaceRailroadOperation(new RailroadOperationSnapshot(collected, List.of(
+				new RailroadOperationItem("A1", "110", "20260813090000", null, "일반")
+		)));
+		store.replaceModelIfNewer(new ModelMeasurementSnapshot("model-id", now, "", 60, 1));
+
+		CongestionInputs inputs = store.snapshot()
+				.freshInputs(now, Duration.ofMinutes(10), Duration.ofSeconds(10))
+				.orElseThrow();
+
+		assertTrue(inputs.railroadOperation().items().isEmpty());
+	}
+
+	@Test
+	void requiresFreshModelMeasurementEvenWhenApiSnapshotsExist() {
 		Instant now = Instant.parse("2026-08-13T00:10:00Z");
 		LatestCongestionInputStore store = populatedStore(now);
 

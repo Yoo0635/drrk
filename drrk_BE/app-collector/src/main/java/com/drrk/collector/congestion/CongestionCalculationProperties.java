@@ -11,6 +11,7 @@ public class CongestionCalculationProperties {
 	private long trainCapacity = 48;
 	private int walkMinutes = 10;
 	private int defaultHeadwayMinutes = 15;
+	private boolean assumeHeadwayWhenScheduleUnavailable = true;
 	private int exitDelayMinMinutes = 45;
 	private int exitDelayMaxMinutes = 90;
 	private double rK = 0.09;
@@ -56,6 +57,14 @@ public class CongestionCalculationProperties {
 
 	public void setDefaultHeadwayMinutes(int defaultHeadwayMinutes) {
 		this.defaultHeadwayMinutes = defaultHeadwayMinutes;
+	}
+
+	public boolean isAssumeHeadwayWhenScheduleUnavailable() {
+		return assumeHeadwayWhenScheduleUnavailable;
+	}
+
+	public void setAssumeHeadwayWhenScheduleUnavailable(boolean assumeHeadwayWhenScheduleUnavailable) {
+		this.assumeHeadwayWhenScheduleUnavailable = assumeHeadwayWhenScheduleUnavailable;
 	}
 
 	public int getExitDelayMinMinutes() {

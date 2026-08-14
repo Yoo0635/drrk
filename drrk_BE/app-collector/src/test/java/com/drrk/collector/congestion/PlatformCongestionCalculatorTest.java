@@ -132,6 +132,45 @@ class PlatformCongestionCalculatorTest {
 	}
 
 	@Test
+	void assumesPublishedHeadwayWhenScheduleApiIsUnavailable() {
+		// 운행정보 API가 403/장애로 비어 있을 때: 공시 배차 간격 한 주기((now-15분, now])로 근사한다.
+		// 센서 창 = (now-25분, now-10분] → 13:35~13:50 계측만 합산
+		CongestionCalculatedMessage result = calculator().calculate(new CongestionInputs(
+				new ArrivalStatusSnapshot(NOW.minusSeconds(60), List.of()),
+				new PassengerForecastSnapshot(NOW.minusSeconds(60), List.of()),
+				new RailroadOperationSnapshot(NOW.minusSeconds(60), List.of()),
+				List.of(
+						new ModelMeasurementSnapshot("m0", Instant.parse("2026-08-13T04:30:00Z"), "desk01", 60, 99),
+						new ModelMeasurementSnapshot("m1", Instant.parse("2026-08-13T04:40:00Z"), "desk01", 60, 6),
+						new ModelMeasurementSnapshot("m2", Instant.parse("2026-08-13T04:49:00Z"), "desk01", 60, 4),
+						new ModelMeasurementSnapshot("m3", Instant.parse("2026-08-13T04:55:00Z"), "desk01", 60, 77)
+				)
+		));
+
+		assertEquals(CongestionCalculationStatus.NO_FLIGHT_DATA, result.status());
+		assertEquals(10.0, result.currentLoad());
+		assertEquals(Instant.parse("2026-08-13T04:45:00Z"), result.lastTrainDepartureAt());
+		assertEquals(10.0 / 48.0, result.score(), 1.0e-9);
+	}
+
+	@Test
+	void returnsNoServiceWhenScheduleExistsButNoTrainIsComing() {
+		CongestionCalculationProperties strict = properties();
+		strict.setAssumeHeadwayWhenScheduleUnavailable(false);
+		PlatformCongestionCalculator strictCalculator = new PlatformCongestionCalculator(
+				Clock.fixed(NOW, ZoneOffset.UTC), () -> MESSAGE_ID, strict);
+
+		CongestionCalculatedMessage result = strictCalculator.calculate(new CongestionInputs(
+				new ArrivalStatusSnapshot(NOW.minusSeconds(60), List.of()),
+				new PassengerForecastSnapshot(NOW.minusSeconds(60), List.of()),
+				new RailroadOperationSnapshot(NOW.minusSeconds(60), List.of()),
+				List.of(new ModelMeasurementSnapshot("m1", Instant.parse("2026-08-13T04:49:00Z"), "desk01", 60, 7))
+		));
+
+		assertEquals(CongestionCalculationStatus.NO_SERVICE, result.status());
+	}
+
+	@Test
 	void returnsNoServiceWhenNoUpcomingTrainExists() {
 		// 막차 이후: 과거 열차만 존재 → T_next 미정의 → 혼잡도 미산출
 		CongestionCalculatedMessage result = calculator().calculate(new CongestionInputs(

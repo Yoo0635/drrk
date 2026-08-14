@@ -38,6 +38,7 @@ congestion:
     train-capacity: ${CONGESTION_TRAIN_CAPACITY:48}
     walk-minutes: ${CONGESTION_WALK_MINUTES:10}
     default-headway-minutes: ${CONGESTION_DEFAULT_HEADWAY_MINUTES:15}
+    assume-headway-when-schedule-unavailable: ${CONGESTION_ASSUME_HEADWAY_WHEN_SCHEDULE_UNAVAILABLE:true}
     exit-delay-min-minutes: ${CONGESTION_EXIT_DELAY_MIN_MINUTES:45}
     exit-delay-max-minutes: ${CONGESTION_EXIT_DELAY_MAX_MINUTES:90}
     rk: ${CONGESTION_R_K:0.09}

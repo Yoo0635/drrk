@@ -7,6 +7,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.util.DefaultUriBuilderFactory;
 import org.springframework.web.util.UriBuilder;
 
 public class RailroadOperationClient {
@@ -25,7 +26,9 @@ public class RailroadOperationClient {
 			RailroadOperationMapper mapper,
 			Clock clock
 	) {
-		this.restClient = builder.clone().baseUrl(properties.railroad().url()).build();
+		this.restClient = builder.clone()
+				.uriBuilderFactory(noneEncodingFactory(properties.railroad().url()))
+				.build();
 		this.properties = properties;
 		this.mapper = mapper;
 		this.clock = clock;
@@ -52,6 +55,15 @@ public class RailroadOperationClient {
 		if (StringUtils.hasText(railroad.stationCode())) {
 			uriBuilder.queryParam("stnCd", railroad.stationCode());
 		}
-		return uriBuilder.queryParam("serviceKey", railroad.key());
+		return uriBuilder.queryParam("serviceKey", AirportServiceKeys.encode(railroad.key()));
+	}
+
+	/**
+	 * serviceKey를 직접 인코딩하므로 UriBuilder의 재인코딩을 끈다 (이중 인코딩 방지).
+	 */
+	private static DefaultUriBuilderFactory noneEncodingFactory(String baseUrl) {
+		DefaultUriBuilderFactory factory = new DefaultUriBuilderFactory(baseUrl);
+		factory.setEncodingMode(DefaultUriBuilderFactory.EncodingMode.NONE);
+		return factory;
 	}
 }

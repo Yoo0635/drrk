@@ -68,14 +68,25 @@ public class PlatformCongestionCalculator implements CongestionCalculator {
 		Instant now = clock.instant();
 		List<RailroadOperationItem> railroadItems = inputs.railroadOperation().items();
 		Optional<Instant> nextArrival = nextArrivalAfterNow(railroadItems, now);
-		if (nextArrival.isEmpty()) {
-			// 다음 열차가 없다 = 막차 이후~첫차 이전이거나 스케줄 자체가 없다 → 혼잡도 미산출
+
+		Instant windowEnd;
+		WindowStart resolvedStart;
+		if (nextArrival.isPresent()) {
+			windowEnd = nextArrival.orElseThrow();
+			resolvedStart = resolveWindowStart(railroadItems, now, windowEnd);
+		} else if (railroadItems.isEmpty() && properties.isAssumeHeadwayWhenScheduleUnavailable()) {
+			// 운행정보 API가 응답하지 않는 경우: 공시 배차 간격 한 주기 동안 승강장에 쌓인 양으로 근사한다.
+			// (열차가 실제로 없는 시간대가 아니라, 스케줄 정보를 못 받은 상황이다)
+			windowEnd = now;
+			resolvedStart = new WindowStart(
+					now.minus(Duration.ofMinutes(properties.getDefaultHeadwayMinutes())),
+					"ASSUMED_HEADWAY_NO_SCHEDULE_DATA"
+			);
+		} else {
+			// 스케줄은 받았는데 다음 열차가 없다 = 막차 이후~첫차 이전 → 혼잡도 미산출
 			log.info("[CONGESTION NO_SERVICE] reason=NO_UPCOMING_TRAIN railroadItemCount={}", railroadItems.size());
 			return CongestionCalculatedMessage.noService(messageIdSupplier.get(), now, inputReferences(inputs));
 		}
-
-		Instant windowEnd = nextArrival.orElseThrow();
-		WindowStart resolvedStart = resolveWindowStart(railroadItems, now, windowEnd);
 		Instant windowStart = resolvedStart.value();
 		Duration walk = Duration.ofMinutes(properties.getWalkMinutes());
 		Instant sensorWindowStart = windowStart.minus(walk);

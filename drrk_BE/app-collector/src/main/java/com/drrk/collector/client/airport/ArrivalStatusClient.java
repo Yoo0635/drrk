@@ -3,6 +3,7 @@ package com.drrk.collector.client.airport;
 import com.drrk.collector.congestion.ArrivalStatusSnapshot;
 import java.time.Clock;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.util.DefaultUriBuilderFactory;
 
 public class ArrivalStatusClient {
 
@@ -17,7 +18,9 @@ public class ArrivalStatusClient {
 			ArrivalStatusMapper mapper,
 			Clock clock
 	) {
-		this.restClient = builder.clone().baseUrl(properties.arrivalStatus().url()).build();
+		this.restClient = builder.clone()
+				.uriBuilderFactory(noneEncodingFactory(properties.arrivalStatus().url()))
+				.build();
 		this.properties = properties;
 		this.mapper = mapper;
 		this.clock = clock;
@@ -31,10 +34,19 @@ public class ArrivalStatusClient {
 						.queryParam("numOfRows", properties.numOfRows())
 						.queryParam("type", "json")
 						.queryParam("terno", "T1")
-						.queryParam("serviceKey", properties.arrivalStatus().key())
+						.queryParam("serviceKey", AirportServiceKeys.encode(properties.arrivalStatus().key()))
 						.build())
 				.retrieve()
 				.body(ArrivalStatusApiResponse.class);
 		return mapper.map(response, clock.instant());
+	}
+
+	/**
+	 * serviceKey를 직접 인코딩하므로 UriBuilder의 재인코딩을 끈다 (이중 인코딩 방지).
+	 */
+	private static DefaultUriBuilderFactory noneEncodingFactory(String baseUrl) {
+		DefaultUriBuilderFactory factory = new DefaultUriBuilderFactory(baseUrl);
+		factory.setEncodingMode(DefaultUriBuilderFactory.EncodingMode.NONE);
+		return factory;
 	}
 }
