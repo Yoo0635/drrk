@@ -11,6 +11,8 @@ const W = 720;
 const H = 300;
 const PAD = { l: 58, r: 18, t: 22, b: 32 };
 const GAP = 26;
+/** 레벨 라벨끼리 최소로 떨어져야 하는 가로 간격(px). 이보다 가까우면 라벨을 생략한다. */
+const LABEL_MIN_GAP = 38;
 
 interface RealtimeCongestionChartProps {
   carrierSamples: CongestionSample[];
@@ -67,6 +69,55 @@ function levelLabel(level: string) {
   }
 }
 
+const LEVEL_SEVERITY: Record<string, number> = { FULL: 3, HIGH: 2, MEDIUM: 1, LOW: 0 };
+
+function severityOf(level: string) {
+  return LEVEL_SEVERITY[level] ?? 0;
+}
+
+/**
+ * 라벨을 그릴 인덱스를 고른다.
+ *
+ * <p>30개를 모두 그리면 글씨가 겹치므로 레벨이 바뀌는 지점과 현재값만 후보로 두고,
+ * 후보끼리 {@link LABEL_MIN_GAP}보다 가까우면 <b>더 심각한 레벨</b>을 남긴다.
+ * 되돌아온 "원활"보다 잠깐 치솟은 "혼잡"이 운영자에게 중요한 정보이기 때문이다.
+ * 현재값은 언제나 남긴다.</p>
+ */
+function pickLabeledIndices(
+  samples: ScoreSample[],
+  xAt: (index: number) => number,
+): number[] {
+  if (samples.length === 0) {
+    return [];
+  }
+
+  const lastIndex = samples.length - 1;
+  const candidates = samples.reduce<number[]>((acc, sample, index) => {
+    const levelChanged = index > 0 && samples[index - 1].level !== sample.level;
+    if (index === 0 || levelChanged || index === lastIndex) {
+      acc.push(index);
+    }
+    return acc;
+  }, []);
+
+  const kept = [lastIndex];
+  const ranked = candidates
+    .filter((index) => index !== lastIndex)
+    .sort((a, b) => {
+      const bySeverity = severityOf(samples[b].level) - severityOf(samples[a].level);
+      return bySeverity !== 0 ? bySeverity : b - a;
+    });
+
+  ranked.forEach((index) => {
+    const fits = kept.every((other) => Math.abs(xAt(other) - xAt(index)) >= LABEL_MIN_GAP);
+    if (fits) {
+      kept.push(index);
+    }
+  });
+
+  return kept.sort((a, b) => a - b);
+}
+
 export function RealtimeCongestionChart({
   carrierSamples,
   scoreSamples,
@@ -117,6 +168,11 @@ export function RealtimeCongestionChart({
           ? `${rightStart},${PAD.t + innerHeight} ${scorePoints} ${rightEnd},${PAD.t + innerHeight}`
           : "",
       xAt,
+      /**
+       * 라벨을 그릴 인덱스. 30개를 모두 그리면 글씨가 겹치므로
+       * 레벨이 바뀌는 지점과 현재값만 남기고, 그마저도 너무 붙으면 생략한다.
+       */
+      labeledIndices: pickLabeledIndices(scoreSamples, (index) => xAt(index, rightStart)),
     };
   }, [carrierSamples, scoreSamples]);
 
@@ -261,27 +317,42 @@ export function RealtimeCongestionChart({
           const x = graph.xAt(index, graph.rightStart);
           const y = graph.scoreY(sample.score);
           const color = levelColor(sample.level);
+          const isLast = index === scoreSamples.length - 1;
+          const showLabel = graph.labeledIndices.includes(index);
+          // 아래쪽 점은 라벨을 위로 올려 x축 눈금(30회 전 / 현재)과 겹치지 않게 한다.
+          const nearBottom = y > PAD.t + graph.innerHeight - 30;
+          const labelY = nearBottom ? y - 11 : y + 16;
+          // 양끝 라벨이 차트 밖으로 잘리지 않도록 기준점을 안쪽으로 붙인다.
+          const labelAnchor =
+            x > graph.rightEnd - 18 ? "end" : x < graph.rightStart + 18 ? "start" : "middle";
 
           return (
             <g key={`score-${sample.timestamp}-${index}`}>
               <circle
                 cx={x}
                 cy={y}
-                r={index === scoreSamples.length - 1 ? 5 : 3}
+                r={isLast ? 5 : 3}
                 fill={color}
                 stroke={C.panel}
                 strokeWidth={1.5}
               />
-              <text
-                x={x}
-                y={Math.min(H - 18, y + 15)}
-                textAnchor="middle"
-                fontSize={9}
-                fill={color}
-                fontWeight={700}
-              >
-                {levelLabel(sample.level)}
-              </text>
+              {showLabel && (
+                <text
+                  x={x}
+                  y={labelY}
+                  textAnchor={labelAnchor}
+                  fontSize={isLast ? 11 : 10}
+                  fill={color}
+                  fontWeight={700}
+                  // 꺾은선 위에 라벨이 올라가도 읽히도록 배경색 외곽선을 두른다.
+                  stroke={C.panel}
+                  strokeWidth={3}
+                  paintOrder="stroke"
+                  strokeLinejoin="round"
+                >
+                  {levelLabel(sample.level)}
+                </text>
+              )}
             </g>
           );
         })}
