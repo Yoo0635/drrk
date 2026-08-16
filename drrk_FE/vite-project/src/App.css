@@ -1,0 +1,31 @@
+/* ============================================================
+   페이지 셸
+   지도와 대시보드가 '같은 폭'을 공유해야 따로 놀지 않는다.
+   두 영역 모두 .page의 폭을 그대로 쓰는 풀블리드 타일이다.
+   ============================================================ */
+.page {
+  width: 100%;
+  max-width: var(--content-max);
+  margin: 0 auto;
+  min-height: 100vh;
+
+  display: flex;
+  flex-direction: column;
+
+  background: var(--canvas);
+}
+
+/* 지도 타일 — 좌우 여백 없이 폭을 꽉 채운다 */
+.top-area {
+  width: 100%;
+  background: var(--canvas-alt);
+}
+
+/* 대시보드 타일 — 흰 바탕으로 전환. 색 변화 자체가 구분선 */
+.bottom-area {
+  flex: 1;
+  width: 100%;
+
+  background: var(--canvas);
+  border-top: 1px solid var(--hairline);
+}

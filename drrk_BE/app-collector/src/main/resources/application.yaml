@@ -1,3 +1,52 @@
 spring:
   application:
     name: collector
+  rabbitmq:
+    publisher-confirm-type: correlated
+    publisher-returns: true
+
+airport:
+  collection:
+    enabled: ${AIRPORT_COLLECTION_ENABLED:false}
+    fixed-delay: ${AIRPORT_COLLECTION_FIXED_DELAY:PT5M}
+    initial-delay: ${AIRPORT_COLLECTION_INITIAL_DELAY:PT1S}
+  api:
+    num-of-rows: ${AIRPORT_API_NUM_OF_ROWS:1000}
+    arrival-status:
+      url: ${AIRPORT_ARRIVAL_STATUS_API_URL:}
+      key: ${AIRPORT_ARRIVAL_STATUS_API_KEY:}
+    passenger-forecast:
+      url: ${AIRPORT_PASSENGER_FORECAST_API_URL:}
+      key: ${AIRPORT_PASSENGER_FORECAST_API_KEY:}
+    railroad:
+      url: ${AIRPORT_RAILROAD_API_URL:}
+      key: ${AIRPORT_RAILROAD_API_KEY:}
+      train-class: ${AIRPORT_RAILROAD_TRAIN_CLASS:}
+      station-code: ${AIRPORT_RAILROAD_STATION_CODE:}
+
+inference:
+  consumer:
+    auto-startup: ${INFERENCE_CONSUMER_AUTO_STARTUP:true}
+
+congestion:
+  calculation:
+    enabled: ${CONGESTION_CALCULATION_ENABLED:false}
+    fixed-rate: ${CONGESTION_CALCULATION_FIXED_RATE:PT5S}
+    initial-delay: ${CONGESTION_CALCULATION_INITIAL_DELAY:PT5S}
+    api-max-age: ${CONGESTION_API_MAX_AGE:PT10M}
+    model-max-age: ${CONGESTION_MODEL_MAX_AGE:PT5S}
+    train-capacity: ${CONGESTION_TRAIN_CAPACITY:48}
+    walk-minutes: ${CONGESTION_WALK_MINUTES:10}
+    default-headway-minutes: ${CONGESTION_DEFAULT_HEADWAY_MINUTES:15}
+    assume-headway-when-schedule-unavailable: ${CONGESTION_ASSUME_HEADWAY_WHEN_SCHEDULE_UNAVAILABLE:true}
+    exit-delay-min-minutes: ${CONGESTION_EXIT_DELAY_MIN_MINUTES:45}
+    exit-delay-max-minutes: ${CONGESTION_EXIT_DELAY_MAX_MINUTES:90}
+    rk: ${CONGESTION_R_K:0.09}
+    rf: ${CONGESTION_R_F:0.22}
+    ck: ${CONGESTION_C_K:0.75}
+    cf: ${CONGESTION_C_F:0.95}
+  moving-walkway:
+    enabled: ${CONGESTION_MOVING_WALKWAY_ENABLED:false}
+    sensor-space-id: ${CONGESTION_SENSOR_SPACE_ID:}
+  publisher:
+    confirm-timeout: ${CONGESTION_PUBLISH_CONFIRM_TIMEOUT:PT2S}

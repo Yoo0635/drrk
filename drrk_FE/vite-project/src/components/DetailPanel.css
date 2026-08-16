@@ -1,0 +1,37 @@
+.detail__title {
+  margin: 0 0 6px;
+  font-size: 20px;
+}
+
+.detail__value {
+  margin: 0 0 10px;
+  color: #4b5563;
+}
+
+.detail__badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.detail__badge--free {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.detail__badge--normal {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.detail__badge--busy {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.detail__empty {
+  margin: 0;
+  color: #9ca3af;
+}

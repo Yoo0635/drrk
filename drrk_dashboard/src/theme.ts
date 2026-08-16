@@ -1,0 +1,18 @@
+export const C = {
+  bg: "#070b10",
+  panel: "#0e1620",
+  head: "#1a2a3a",
+  cell: "#16222e",
+  line: "#22333f",
+  lineSoft: "#1a2732",
+  txt: "#e8f1f8",
+  dim: "#9fb3c4",
+  cyan: "#3fa9dc",
+  green: "#2fbf5f",
+  blue: "#4b9fd6",
+  yellow: "#f2d024",
+  red: "#ff4d4f",
+  orange: "#f0a33c",
+  purple: "#9b6ad8",
+  planLine: "#7fd4ff",
+} as const;

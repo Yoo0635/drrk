@@ -1,3 +1,53 @@
 spring:
   application:
     name: main
+  rabbitmq:
+    listener:
+      simple:
+        default-requeue-rejected: false
+  sql:
+    init:
+      mode: always
+  mail:
+    host: ${SMTP_HOST}
+    port: ${SMTP_PORT}
+    username: ${SMTP_USERNAME}
+    password: ${SMTP_PASSWORD}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+auth:
+  jwt-secret: ${JWT_SECRET}
+  access-token-ttl-minutes: ${JWT_ACCESS_TOKEN_TTL_MINUTES:15}
+  refresh-token-ttl-days: ${JWT_REFRESH_TOKEN_TTL_DAYS:14}
+  cookie:
+    secure: ${COOKIE_SECURE:true}
+    same-site: ${COOKIE_SAME_SITE:Lax}
+    domain: ${COOKIE_DOMAIN:}
+  cors-allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
+
+congestion:
+  consumer:
+    auto-startup: ${CONGESTION_CONSUMER_AUTO_STARTUP:true}
+
+inference:
+  consumer:
+    auto-startup: ${INFERENCE_CONSUMER_AUTO_STARTUP:true}
+  stream:
+    fixed-rate: ${INFERENCE_STREAM_FIXED_RATE:PT5S}
+    snapshot-max-age: ${INFERENCE_STREAM_SNAPSHOT_MAX_AGE:PT5S}
+    congestion-max-age: ${INFERENCE_STREAM_CONGESTION_MAX_AGE:PT25S}
+    emitter-timeout: ${INFERENCE_STREAM_EMITTER_TIMEOUT:PT30M}
