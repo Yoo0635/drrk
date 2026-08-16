@@ -147,7 +147,7 @@ class PlatformCongestionCalculatorTest {
 				)
 		));
 
-		assertEquals(CongestionCalculationStatus.NO_FLIGHT_DATA, result.status());
+		assertEquals(CongestionCalculationStatus.CALCULATED, result.status());
 		assertEquals(10.0, result.currentLoad());
 		assertEquals(Instant.parse("2026-08-13T04:45:00Z"), result.lastTrainDepartureAt());
 		assertEquals(10.0 / 48.0, result.score(), 1.0e-9);

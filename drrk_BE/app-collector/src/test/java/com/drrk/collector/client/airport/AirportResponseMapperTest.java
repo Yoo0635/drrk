@@ -117,7 +117,7 @@ class AirportResponseMapperTest {
 				    "header": {"resultCode": "00", "resultMsg": "NORMAL SERVICE."},
 				    "body": {"items": {"item": [
 				      {"airport": "FRA", "flightid": "OZ542", "terno": "T1", "entrygate": "B", "gatenumber": "15",
-				       "scheduletime": "202608130115", "estimatedtime": "202608130134",
+				       "scheduletime": "202608130815", "estimatedtime": "202608130834",
 				       "korean": "120.0", "foreigner": "46.0"}
 				    ]}, "numOfRows": "10", "pageNo": "1", "totalCount": "35"}
 				  }
@@ -127,7 +127,7 @@ class AirportResponseMapperTest {
 		ArrivalStatusSnapshot snapshot = new ArrivalStatusMapper().map(response, collectedAt);
 
 		assertEquals(
-				List.of(new ArrivalStatusItem("B", "OZ542", "202608130134", 120, 46)),
+				List.of(new ArrivalStatusItem("B", "OZ542", "202608130834", 120, 46)),
 				snapshot.items()
 		);
 	}
@@ -140,7 +140,7 @@ class AirportResponseMapperTest {
 				    "header": {"resultCode": "00", "resultMsg": "NORMAL SERVICE."},
 				    "body": {"items": {"item": [
 				      {"terno": "T1", "entrygate": "C", "flightid": "KE100", "estimatedtime": "",
-				       "scheduletime": "202608130140", "korean": "30.0", "foreigner": "10.0"}
+				       "scheduletime": "202608130840", "korean": "30.0", "foreigner": "10.0"}
 				    ]}}
 				  }
 				}
@@ -149,7 +149,7 @@ class AirportResponseMapperTest {
 		ArrivalStatusSnapshot snapshot = new ArrivalStatusMapper().map(response, collectedAt);
 
 		assertEquals(
-				List.of(new ArrivalStatusItem("C", "KE100", "202608130140", 30, 10)),
+				List.of(new ArrivalStatusItem("C", "KE100", "202608130840", 30, 10)),
 				snapshot.items()
 		);
 	}
