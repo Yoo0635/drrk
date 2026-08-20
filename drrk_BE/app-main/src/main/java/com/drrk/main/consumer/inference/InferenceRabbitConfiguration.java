@@ -21,6 +21,7 @@ public class InferenceRabbitConfiguration {
 	public static final String INFERENCE_DEAD_LETTER_EXCHANGE = "drrk.inference.dlx";
 	public static final String INFERENCE_DEAD_LETTER_ROUTING_KEY = "inference.window.dead.v1";
 	public static final String INFERENCE_DEAD_LETTER_QUEUE = "drrk.main.inference.window.dlq";
+	public static final int INFERENCE_DEAD_LETTER_MESSAGE_TTL_MILLIS = 30 * 60 * 1000;
 
 	@Bean
 	DirectExchange inferenceExchange() {
@@ -42,7 +43,9 @@ public class InferenceRabbitConfiguration {
 
 	@Bean
 	Queue inferenceDeadLetterQueue() {
-		return QueueBuilder.durable(INFERENCE_DEAD_LETTER_QUEUE).build();
+		return QueueBuilder.durable(INFERENCE_DEAD_LETTER_QUEUE)
+				.ttl(INFERENCE_DEAD_LETTER_MESSAGE_TTL_MILLIS)
+				.build();
 	}
 
 	@Bean

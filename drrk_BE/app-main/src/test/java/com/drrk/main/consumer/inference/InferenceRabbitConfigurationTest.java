@@ -45,6 +45,8 @@ class InferenceRabbitConfigurationTest {
 		assertThat(mainBinding.getRoutingKey()).isEqualTo("inference.window.v1");
 		assertThat(deadLetterQueue.getName()).isEqualTo("drrk.main.inference.window.dlq");
 		assertThat(deadLetterQueue.isDurable()).isTrue();
+		assertThat(deadLetterQueue.getArguments())
+				.containsEntry("x-message-ttl", InferenceRabbitConfiguration.INFERENCE_DEAD_LETTER_MESSAGE_TTL_MILLIS);
 		assertThat(deadLetterBinding.getExchange()).isEqualTo("drrk.inference.dlx");
 		assertThat(deadLetterBinding.getRoutingKey()).isEqualTo("inference.window.dead.v1");
 	}

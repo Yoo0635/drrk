@@ -16,6 +16,8 @@ import tools.jackson.databind.ObjectMapper;
 @Configuration(proxyBeanMethods = false)
 public class CongestionRabbitConfiguration {
 
+	public static final int DEAD_LETTER_MESSAGE_TTL_MILLIS = 30 * 60 * 1000;
+
 	@Bean
 	DirectExchange congestionExchange() {
 		return new DirectExchange(CongestionRabbitNames.EXCHANGE, true, false);
@@ -36,7 +38,9 @@ public class CongestionRabbitConfiguration {
 
 	@Bean
 	Queue congestionDeadLetterQueue() {
-		return QueueBuilder.durable(CongestionRabbitNames.DEAD_LETTER_QUEUE).build();
+		return QueueBuilder.durable(CongestionRabbitNames.DEAD_LETTER_QUEUE)
+				.ttl(DEAD_LETTER_MESSAGE_TTL_MILLIS)
+				.build();
 	}
 
 	@Bean

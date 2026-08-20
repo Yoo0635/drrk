@@ -42,6 +42,8 @@ class CongestionRabbitConfigurationTest {
 		assertThat(mainBinding.getExchange()).isEqualTo(CongestionRabbitNames.EXCHANGE);
 		assertThat(mainBinding.getRoutingKey()).isEqualTo(CongestionRabbitNames.ROUTING_KEY);
 		assertThat(deadLetterQueue.getName()).isEqualTo(CongestionRabbitNames.DEAD_LETTER_QUEUE);
+		assertThat(deadLetterQueue.getArguments())
+				.containsEntry("x-message-ttl", CongestionRabbitConfiguration.DEAD_LETTER_MESSAGE_TTL_MILLIS);
 		assertThat(deadLetterBinding.getExchange()).isEqualTo(CongestionRabbitNames.DEAD_LETTER_EXCHANGE);
 		assertThat(deadLetterBinding.getRoutingKey()).isEqualTo(CongestionRabbitNames.DEAD_LETTER_ROUTING_KEY);
 	}
