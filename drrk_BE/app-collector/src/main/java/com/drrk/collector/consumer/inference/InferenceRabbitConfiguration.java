@@ -16,6 +16,8 @@ import tools.jackson.databind.ObjectMapper;
 @Configuration
 public class InferenceRabbitConfiguration {
 
+	public static final int DEAD_LETTER_MESSAGE_TTL_MILLIS = 30 * 60 * 1000;
+
 	@Bean
 	DirectExchange inferenceExchange() {
 		return new DirectExchange(InferenceRabbitNames.EXCHANGE, true, false);
@@ -36,7 +38,9 @@ public class InferenceRabbitConfiguration {
 
 	@Bean
 	Queue inferenceDeadLetterQueue() {
-		return QueueBuilder.durable(InferenceRabbitNames.DEAD_LETTER_QUEUE).build();
+		return QueueBuilder.durable(InferenceRabbitNames.DEAD_LETTER_QUEUE)
+				.ttl(DEAD_LETTER_MESSAGE_TTL_MILLIS)
+				.build();
 	}
 
 	@Bean
