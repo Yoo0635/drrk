@@ -14,16 +14,21 @@ ls -la /opt/drrk/main/nginx/templates/ 2>/dev/null || true
 docker exec drrk-main-nginx sh -c 'ls /etc/nginx/conf.d/; echo ---; cat /etc/nginx/conf.d/*.conf' 2>/dev/null || true
 
 echo "===== [4] app-main recent logs (congestion / SSE / guide) ====="
-docker logs --since 15m drrk-app-main 2>&1 \
+for app in drrk-app-main-blue drrk-app-main-green drrk-app-main; do
+  docker logs --since 15m "$app" 2>&1 \
   | grep -aE 'AIRPORT GUIDE|CONGESTION|carrier|SSE|inference|ERROR|WARN' | tail -60 || true
+done
 
 echo "===== [5] direct SSE sample from inside app-main (12s) ====="
-docker compose --env-file /opt/drrk/env/main.env -f /opt/drrk/main/compose.yml exec -T app-main \
+active_slot="$(grep -E '^ACTIVE_APP_SLOT=' /opt/drrk/env/main.env 2>/dev/null | tail -1 | cut -d= -f2)"
+active_app="app-main-${active_slot:-blue}"
+
+docker compose --env-file /opt/drrk/env/main.env -f /opt/drrk/main/compose.yml exec -T "$active_app" \
   sh -c 'curl -N -s -m 12 http://localhost:8080/api/v1/inference/carriers/stream | head -c 4000' || true
 echo ""
 
 echo "===== [6] REST congestion snapshot ====="
-docker compose --env-file /opt/drrk/env/main.env -f /opt/drrk/main/compose.yml exec -T app-main \
+docker compose --env-file /opt/drrk/env/main.env -f /opt/drrk/main/compose.yml exec -T "$active_app" \
   sh -c 'curl -s -m 5 -w "\nHTTP %{http_code}\n" http://localhost:8080/api/v1/platform/congestion' || true
 
 echo "===== [7] via nginx with Host variants ====="
