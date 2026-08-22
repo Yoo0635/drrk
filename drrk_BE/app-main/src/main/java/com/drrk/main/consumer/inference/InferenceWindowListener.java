@@ -111,15 +111,13 @@ public class InferenceWindowListener {
 				}
 			}
 		}
+		latestSnapshotStore.updateIfLatest(new LatestInferenceSnapshot(
+				message.messageId(),
+				message.spaceId(),
+				Instant.ofEpochMilli((long) (message.ts() * 1000)),
+				message.nCarriers()
+		));
 		channel.basicAck(deliveryTag, false);
-		if (result == InferenceIngestionResult.STORED) {
-			latestSnapshotStore.updateIfLatest(new LatestInferenceSnapshot(
-					message.messageId(),
-					message.spaceId(),
-					Instant.ofEpochMilli((long) (message.ts() * 1000)),
-					message.nCarriers()
-			));
-		}
 		logSuccess(message, result, attempt);
 	}
 

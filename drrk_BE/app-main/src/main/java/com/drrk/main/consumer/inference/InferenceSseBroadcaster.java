@@ -23,6 +23,7 @@ public class InferenceSseBroadcaster {
 
 	private static final Logger log = LoggerFactory.getLogger(InferenceSseBroadcaster.class);
 	private static final String EVENT_NAME = "carrier-count";
+	private static final Duration DRAIN_RETRY = Duration.ofSeconds(1);
 
 	private final LatestInferenceSnapshotStore store;
 	private final LatestAirportGuideStore airportGuideStore;
@@ -65,6 +66,18 @@ public class InferenceSseBroadcaster {
 
 	public SseEmitter subscribe() {
 		return subscribe(new SseEmitter(emitterTimeout.toMillis()));
+	}
+
+	public int activeEmitterCount() {
+		return emitters.size();
+	}
+
+	public int drainActiveEmitters() {
+		List<SseEmitter> currentEmitters = List.copyOf(emitters);
+		for (SseEmitter emitter : currentEmitters) {
+			sendDrainAndComplete(emitter);
+		}
+		return currentEmitters.size();
 	}
 
 	SseEmitter subscribe(SseEmitter emitter) {
@@ -116,6 +129,18 @@ public class InferenceSseBroadcaster {
 			emitter.send(SseEmitter.event().comment("heartbeat"));
 		} catch (IOException | IllegalStateException exception) {
 			log.debug("[INFERENCE SSE HEARTBEAT FAILED] reason={}", exception.getMessage());
+			removeAndComplete(emitter);
+		}
+	}
+
+	private void sendDrainAndComplete(SseEmitter emitter) {
+		try {
+			emitter.send(SseEmitter.event()
+					.reconnectTime(DRAIN_RETRY.toMillis())
+					.comment("drain"));
+		} catch (IOException | IllegalStateException exception) {
+			log.debug("[INFERENCE SSE DRAIN FAILED] reason={}", exception.getMessage());
+		} finally {
 			removeAndComplete(emitter);
 		}
 	}

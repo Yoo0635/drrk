@@ -1,6 +1,8 @@
 spring:
   application:
     name: main
+  lifecycle:
+    timeout-per-shutdown-phase: ${SPRING_LIFECYCLE_TIMEOUT_PER_SHUTDOWN_PHASE:60s}
   rabbitmq:
     listener:
       simple:
@@ -51,3 +53,25 @@ inference:
     snapshot-max-age: ${INFERENCE_STREAM_SNAPSHOT_MAX_AGE:PT5S}
     congestion-max-age: ${INFERENCE_STREAM_CONGESTION_MAX_AGE:PT25S}
     emitter-timeout: ${INFERENCE_STREAM_EMITTER_TIMEOUT:PT30M}
+
+management:
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+    prometheus:
+      access: read-only
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+server:
+  shutdown: ${SERVER_SHUTDOWN:graceful}

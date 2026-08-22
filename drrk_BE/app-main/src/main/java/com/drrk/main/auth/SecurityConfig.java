@@ -32,9 +32,18 @@ public class SecurityConfig {
 						.csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
 						.ignoringRequestMatchers("/api/v1/auth/login",
 								"/api/v1/auth/signup", "/api/v1/auth/email-verifications",
-								"/api/v1/auth/email-verifications/confirm"))
+								"/api/v1/auth/email-verifications/confirm",
+								"/internal/sse/drain"))
 				.authorizeHttpRequests(auth -> auth
+						.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 						.requestMatchers(HttpMethod.GET, "/healthz").permitAll()
+						.requestMatchers(HttpMethod.GET,
+								"/actuator/health",
+								"/actuator/health/liveness",
+								"/actuator/health/readiness").permitAll()
+						.requestMatchers(HttpMethod.GET, "/actuator/prometheus").authenticated()
+						.requestMatchers(HttpMethod.GET, "/internal/sse/connections").permitAll()
+						.requestMatchers(HttpMethod.POST, "/internal/sse/drain").authenticated()
 						.requestMatchers(HttpMethod.GET, "/api/v1/auth/csrf").permitAll()
 						.requestMatchers(HttpMethod.GET,
 								"/api/v1/platform/congestion",

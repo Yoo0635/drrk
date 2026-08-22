@@ -1,6 +1,8 @@
 spring:
   application:
     name: collector
+  config:
+    import: optional:file:.env[.properties]
   rabbitmq:
     publisher-confirm-type: correlated
     publisher-returns: true
@@ -50,3 +52,22 @@ congestion:
     sensor-space-id: ${CONGESTION_SENSOR_SPACE_ID:}
   publisher:
     confirm-timeout: ${CONGESTION_PUBLISH_CONFIRM_TIMEOUT:PT2S}
+
+management:
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+    prometheus:
+      access: read-only
+  metrics:
+    tags:
+      application: ${spring.application.name}

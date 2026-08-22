@@ -64,9 +64,10 @@ jobs:
           openssl req -x509 -nodes -newkey rsa:2048 -days 1 -subj "/CN=api.example.com" \
             -keyout "$cert_dir/live/api.example.com/privkey.pem" \
             -out "$cert_dir/live/api.example.com/fullchain.pem" >/dev/null 2>&1
-          docker run --rm --add-host app-main:127.0.0.1 \
+          docker run --rm --add-host app-main-blue:127.0.0.1 \
             -e ROOT_DOMAIN=example.com \
-            -e NGINX_ENVSUBST_FILTER="^ROOT_DOMAIN$" \
+            -e ACTIVE_APP_UPSTREAM=app-main-blue:8080 \
+            -e NGINX_ENVSUBST_FILTER="^(ROOT_DOMAIN|ACTIVE_APP_UPSTREAM)$" \
             -v "$PWD/deploy/main/nginx/templates:/etc/nginx/templates:ro" \
             -v "$cert_dir:/etc/letsencrypt:ro" \
             -v "$cert_dir/www:/var/www/certbot:ro" \

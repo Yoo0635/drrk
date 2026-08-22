@@ -87,7 +87,9 @@ class InferenceWindowListenerTest {
 
 		verify(channel).basicAck(DELIVERY_TAG, false);
 		verify(channel, never()).basicReject(DELIVERY_TAG, false);
-		assertThat(latestSnapshotStore.findAll()).isEmpty();
+		assertThat(latestSnapshotStore.findAll())
+				.extracting(LatestInferenceSnapshot::spaceId, LatestInferenceSnapshot::carrierCount)
+				.containsExactly(org.assertj.core.groups.Tuple.tuple("desk01", 3));
 	}
 
 	@Test
@@ -186,10 +188,38 @@ class InferenceWindowListenerTest {
 		).isInstanceOf(IOException.class);
 	}
 
+	@Test
+	void doesNotAcknowledgeWhenLatestSnapshotUpdateFails() throws Exception {
+		when(ingestionService.ingest(any(InferenceWindowMessage.class), eq(VALID_PAYLOAD)))
+				.thenReturn(InferenceIngestionResult.STORED);
+		InferenceWindowMessageParser parser = new InferenceWindowMessageParser(new JsonMapper());
+		InferenceWindowListener failingListener = new InferenceWindowListener(
+				parser,
+				ingestionService,
+				new FailingLatestInferenceSnapshotStore()
+		);
+
+		assertThatThrownBy(
+				() -> failingListener.consume(message(VALID_PAYLOAD, MESSAGE_ID), channel)
+		).isInstanceOf(IllegalStateException.class)
+				.hasMessage("redis unavailable");
+
+		verify(channel, never()).basicAck(DELIVERY_TAG, false);
+		verify(channel, never()).basicReject(DELIVERY_TAG, false);
+	}
+
 	private static Message message(String payload, String amqpMessageId) {
 		MessageProperties properties = new MessageProperties();
 		properties.setMessageId(amqpMessageId);
 		properties.setDeliveryTag(DELIVERY_TAG);
 		return new Message(payload.getBytes(UTF_8), properties);
+	}
+
+	private static final class FailingLatestInferenceSnapshotStore extends LatestInferenceSnapshotStore {
+
+		@Override
+		public void updateIfLatest(LatestInferenceSnapshot snapshot) {
+			throw new IllegalStateException("redis unavailable");
+		}
 	}
 }

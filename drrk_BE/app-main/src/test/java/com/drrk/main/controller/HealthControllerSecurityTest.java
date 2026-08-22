@@ -1,9 +1,11 @@
 package com.drrk.main.controller;
 
-import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.hasKey;
+import static org.hamcrest.Matchers.not;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -16,12 +18,13 @@ import java.sql.Connection;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.http.HttpHeaders;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -37,6 +40,9 @@ import org.springframework.test.web.servlet.MockMvc;
 		"spring.mail.password=test-password",
 		"inference.consumer.auto-startup=false",
 		"congestion.consumer.auto-startup=false",
+		"management.health.db.enabled=false",
+		"management.health.rabbit.enabled=false",
+		"management.health.redis.enabled=false",
 		"auth.jwt-secret=MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTI="
 })
 @AutoConfigureMockMvc
@@ -95,8 +101,30 @@ class HealthControllerSecurityTest {
 	}
 
 	@Test
+	void exposesActuatorReadinessWithoutAuthenticationForBlueGreenDeploy() throws Exception {
+		mockMvc.perform(get("/actuator/health/readiness"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.status").value("UP"));
+	}
+
+	@Test
 	void permitsCarrierCountStreamWithoutAuthentication() throws Exception {
 		mockMvc.perform(get("/api/v1/inference/carriers/stream"))
 				.andExpect(status().isOk());
+	}
+
+	@Test
+	void permitsCorsPreflightForAuthenticatedEndpointsWithoutAuthentication() throws Exception {
+		mockMvc.perform(options("/api/v1/users/me")
+						.header(HttpHeaders.ORIGIN, "http://localhost:5173")
+						.header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "GET"))
+				.andExpect(status().isOk())
+				.andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, "http://localhost:5173"));
+	}
+
+	@Test
+	void keepsAuthenticatedEndpointsProtectedForActualRequests() throws Exception {
+		mockMvc.perform(get("/api/v1/users/me"))
+				.andExpect(status().isUnauthorized());
 	}
 }

@@ -1,6 +1,7 @@
 package com.drrk.main.consumer.congestion;
 
 import com.drrk.messaging.congestion.CongestionRabbitNames;
+import java.time.Duration;
 import org.springframework.amqp.core.AcknowledgeMode;
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
@@ -9,8 +10,10 @@ import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.QueueBuilder;
 import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import tools.jackson.databind.ObjectMapper;
 
 @Configuration(proxyBeanMethods = false)
@@ -76,8 +79,12 @@ public class CongestionRabbitConfiguration {
 	}
 
 	@Bean
-	LatestAirportGuideStore latestAirportGuideStore() {
-		return new LatestAirportGuideStore();
+	LatestAirportGuideStore latestAirportGuideStore(
+			StringRedisTemplate redis,
+			ObjectMapper objectMapper,
+			@Value("${inference.stream.redis-retention:PT10M}") Duration redisRetention
+	) {
+		return new LatestAirportGuideStore(redis, objectMapper, redisRetention);
 	}
 
 	@Bean
