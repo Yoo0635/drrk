@@ -58,10 +58,6 @@ export function useCarrierCountSamples({
       now: () => nowRef.current?.() ?? new Date(),
       onOpen: () => setConnectionStatus("open"),
       onError: () => {
-        if (staleTimeout !== null) {
-          clearTimeout(staleTimeout);
-        }
-        clearSamples();
         setConnectionStatus("reconnecting");
       },
       onSnapshot: (snapshot) => {
