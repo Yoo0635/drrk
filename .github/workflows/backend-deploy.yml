@@ -64,33 +64,60 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Run SSM deploy command
+      - name: Run SSM blue-green deploy command
         run: |
           set -euo pipefail
-          cat > ssm-main.json <<'JSON'
-          {
-            "InstanceIds": ["${{ vars.MAIN_INSTANCE_ID }}"],
-            "DocumentName": "AWS-RunShellScript",
-            "Comment": "Deploy drrk main ${{ github.sha }}",
-            "Parameters": {
-              "commands": [
-                "set -eu",
-                "test -f /opt/drrk/main/compose.yml",
-                "test -f /opt/drrk/env/main.env",
-                "previous_image=$(sed -n 's/^APP_MAIN_IMAGE=//p' /opt/drrk/env/main.env)",
-                "test -n \"$previous_image\"",
-                "rollback() { sudo sed -i -E \"s|^APP_MAIN_IMAGE=.*|APP_MAIN_IMAGE=${previous_image}|\" /opt/drrk/env/main.env; docker compose --env-file /opt/drrk/env/main.env -f /opt/drrk/main/compose.yml up -d --no-deps app-main; }",
-                "trap rollback 0",
-                "sudo sed -i.bak -E 's|^APP_MAIN_IMAGE=.*|APP_MAIN_IMAGE=${{ env.APP_MAIN_IMAGE }}|' /opt/drrk/env/main.env",
-                "docker compose --env-file /opt/drrk/env/main.env -f /opt/drrk/main/compose.yml pull app-main",
-                "docker compose --env-file /opt/drrk/env/main.env -f /opt/drrk/main/compose.yml up -d redis",
-                "docker compose --env-file /opt/drrk/env/main.env -f /opt/drrk/main/compose.yml up -d --no-deps app-main",
-                "docker compose --env-file /opt/drrk/env/main.env -f /opt/drrk/main/compose.yml up -d nginx",
-                "for attempt in $(seq 1 30); do if docker compose --env-file /opt/drrk/env/main.env -f /opt/drrk/main/compose.yml exec -T app-main curl -fsS http://localhost:8080/healthz >/dev/null; then trap - 0; exit 0; fi; sleep 2; done; exit 1"
-              ]
-            }
+
+          commands_file="$(mktemp)"
+          jq -n '[]' > "$commands_file"
+
+          add_command() {
+            command="$1"
+            tmp="$(mktemp)"
+            jq --arg command "$command" '. + [$command]' "$commands_file" > "$tmp"
+            mv "$tmp" "$commands_file"
           }
-          JSON
+
+          add_file() {
+            source_path="$1"
+            target_path="$2"
+            mode="$3"
+            remote_b64="/tmp/drrk-$(basename "$target_path").b64"
+
+            add_command "rm -f '$remote_b64'"
+            base64 -w0 "$source_path" | fold -w 3500 | while IFS= read -r chunk; do
+              add_command "printf '%s' '$chunk' >> '$remote_b64'"
+            done
+            add_command "sudo mkdir -p '$(dirname "$target_path")'"
+            add_command "base64 -d '$remote_b64' | sudo tee '$target_path' >/dev/null"
+            add_command "sudo chmod '$mode' '$target_path'"
+            add_command "rm -f '$remote_b64'"
+          }
+
+          add_command "set -eu"
+          add_command "test -f /opt/drrk/env/main.env"
+          add_command "sudo mkdir -p /opt/drrk/main/nginx/templates /opt/drrk/main/nginx/conf.d /opt/drrk/main/scripts"
+
+          add_file "deploy/main/compose.yml" "/opt/drrk/main/compose.yml" "0644"
+          add_file "deploy/main/nginx/templates/api.conf.template" "/opt/drrk/main/nginx/templates/api.conf.template" "0644"
+          add_file "deploy/main/scripts/blue-green-lib.sh" "/opt/drrk/main/scripts/blue-green-lib.sh" "0755"
+          add_file "deploy/main/scripts/deploy-blue-green.sh" "/opt/drrk/main/scripts/deploy-blue-green.sh" "0755"
+          add_file "deploy/main/scripts/rollback-blue-green.sh" "/opt/drrk/main/scripts/rollback-blue-green.sh" "0755"
+          add_command "sudo /opt/drrk/main/scripts/deploy-blue-green.sh '${{ env.APP_MAIN_IMAGE }}'"
+
+          jq -n \
+            --arg instance "${{ vars.MAIN_INSTANCE_ID }}" \
+            --arg comment "Deploy drrk main ${{ github.sha }} blue-green" \
+            --slurpfile commands "$commands_file" \
+            '{
+              InstanceIds: [$instance],
+              DocumentName: "AWS-RunShellScript",
+              Comment: $comment,
+              Parameters: {
+                commands: $commands[0]
+              }
+            }' > ssm-main.json
+
           command_id="$(aws ssm send-command \
             --cli-input-json file://ssm-main.json \
             --query "Command.CommandId" \
