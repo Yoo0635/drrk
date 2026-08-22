@@ -80,9 +80,8 @@ public class LatestInferenceSnapshotStore {
 	}
 
 	public List<LatestInferenceSnapshot> findAllFresh(Instant now, Duration maxAge) {
-		return latestBySpace.values().stream()
+		return findAll().stream()
 				.filter(snapshot -> isFresh(snapshot.windowEndedAt(), now, maxAge))
-				.sorted(Comparator.comparing(LatestInferenceSnapshot::spaceId))
 				.toList();
 	}
 

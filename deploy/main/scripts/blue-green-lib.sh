@@ -337,8 +337,8 @@ wait_for_slot_sse_drain() {
     if [ "$count" = "0" ]; then
       return 0
     fi
-    sleep_seconds 1
-    elapsed=$((elapsed + 1))
+    sleep_seconds "$SSE_DRAIN_RETRY_SECONDS"
+    elapsed=$((elapsed + SSE_DRAIN_RETRY_SECONDS))
   done
 
   return 1

@@ -14,6 +14,8 @@ is_slot "$target_slot" || die "rollback slot must be blue or green"
 target_service="$(slot_service "$target_slot")"
 log "Rolling back from $active_slot to $target_slot"
 
+compose up -d "$target_service"
+
 if ! wait_for_slot_health "$target_slot"; then
   die "health check failed for rollback target $target_service"
 fi

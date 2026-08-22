@@ -220,7 +220,7 @@ Collector 서버는 외부에 비즈니스 API를 노출하지 않고 수집·�
 | 영역 | 기술 |
 |---|---|
 | Frontend | React 19, TypeScript 6, Vite 8, Vitest |
-| Backend | Java 21, Spring Boot 4.0, Gradle 9.5 |
+| Backend | Java 21, Spring Boot 4.0, Gradle 9.5.1 |
 | Data | PostgreSQL 16, Redis 7 |
 | Messaging | RabbitMQ 3, Dead Letter Queue |
 | Observability | Spring Boot Actuator, Micrometer, Prometheus 3, Grafana 12 |

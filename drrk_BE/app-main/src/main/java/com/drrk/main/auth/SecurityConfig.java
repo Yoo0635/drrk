@@ -40,10 +40,10 @@ public class SecurityConfig {
 						.requestMatchers(HttpMethod.GET,
 								"/actuator/health",
 								"/actuator/health/liveness",
-								"/actuator/health/readiness",
-								"/actuator/prometheus").permitAll()
+								"/actuator/health/readiness").permitAll()
+						.requestMatchers(HttpMethod.GET, "/actuator/prometheus").authenticated()
 						.requestMatchers(HttpMethod.GET, "/internal/sse/connections").permitAll()
-						.requestMatchers(HttpMethod.POST, "/internal/sse/drain").permitAll()
+						.requestMatchers(HttpMethod.POST, "/internal/sse/drain").authenticated()
 						.requestMatchers(HttpMethod.GET, "/api/v1/auth/csrf").permitAll()
 						.requestMatchers(HttpMethod.GET,
 								"/api/v1/platform/congestion",
