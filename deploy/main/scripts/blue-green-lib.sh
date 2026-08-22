@@ -10,9 +10,12 @@
 : "${ACTUATOR_HEALTH_URL:=http://localhost:8080/actuator/health/readiness}"
 : "${HEALTH_RETRIES:=30}"
 : "${HEALTH_INTERVAL_SECONDS:=2}"
-: "${STOP_PREVIOUS_AFTER_SWITCH:=false}"
-: "${BLUE_GREEN_DRAIN_SECONDS:=0}"
-: "${APP_MAIN_STOP_TIMEOUT_SECONDS:=70}"
+: "${STOP_PREVIOUS_AFTER_SWITCH:=}"
+: "${SSE_ROLLBACK_WINDOW_SECONDS:=}"
+: "${SSE_DRAIN_TIMEOUT_SECONDS:=}"
+: "${SSE_DRAIN_RETRY_SECONDS:=}"
+: "${BLUE_GREEN_DRAIN_SECONDS:=}"
+: "${APP_MAIN_STOP_TIMEOUT_SECONDS:=}"
 : "${DRY_RUN:=0}"
 
 log() {
@@ -59,6 +62,30 @@ set_env_value() {
   mv "$tmp" "$ENV_FILE"
 }
 
+load_runtime_option() {
+  key="$1"
+  default_value="$2"
+  current_value="$(eval "printf '%s' \"\${$key:-}\"")"
+  [ -z "$current_value" ] || return 0
+
+  file_value="$(read_env_value "$key")"
+  if [ -n "$file_value" ]; then
+    export "$key=$file_value"
+    return 0
+  fi
+
+  export "$key=$default_value"
+}
+
+load_deploy_runtime_options() {
+  load_runtime_option STOP_PREVIOUS_AFTER_SWITCH false
+  load_runtime_option SSE_ROLLBACK_WINDOW_SECONDS 60
+  load_runtime_option SSE_DRAIN_TIMEOUT_SECONDS 30
+  load_runtime_option SSE_DRAIN_RETRY_SECONDS 1
+  load_runtime_option BLUE_GREEN_DRAIN_SECONDS 0
+  load_runtime_option APP_MAIN_STOP_TIMEOUT_SECONDS 70
+}
+
 is_slot() {
   [ "$1" = "blue" ] || [ "$1" = "green" ]
 }
@@ -93,6 +120,7 @@ slot_upstream() {
 
 ensure_blue_green_env() {
   [ -f "$ENV_FILE" ] || die "env file not found: $ENV_FILE"
+  load_deploy_runtime_options
   legacy_image="$(read_env_value APP_MAIN_IMAGE)"
   blue_image="$(read_env_value APP_MAIN_BLUE_IMAGE)"
   green_image="$(read_env_value APP_MAIN_GREEN_IMAGE)"
@@ -192,6 +220,26 @@ wait_for_slot_health() {
   return 1
 }
 
+wait_for_slot_health_after_switch() {
+  slot="$1"
+  if [ "$DRY_RUN" = "1" ]; then
+    dry_log "post-switch healthcheck $(slot_service "$slot") $ACTUATOR_HEALTH_URL"
+    [ "${DRY_RUN_POST_SWITCH_HEALTH_STATUS:-${DRY_RUN_HEALTH_STATUS:-success}}" = "success" ]
+    return $?
+  fi
+  wait_for_slot_health "$slot"
+}
+
+sleep_seconds() {
+  seconds="$1"
+  [ "$seconds" -gt 0 ] || return 0
+  if [ "$DRY_RUN" = "1" ]; then
+    dry_log "sleep $seconds"
+    return 0
+  fi
+  sleep "$seconds"
+}
+
 render_nginx_config() {
   slot="$1"
   root_domain="$(read_env_value ROOT_DOMAIN)"
@@ -247,6 +295,53 @@ switch_nginx_to_slot() {
   set_env_value ACTIVE_APP_SLOT "$slot"
   set_env_value APP_MAIN_IMAGE "$image"
   printf '%s\n' "$slot" > "$STATE_FILE"
+}
+
+drain_slot_sse() {
+  slot="$1"
+  service="$(slot_service "$slot")"
+  url="http://localhost:8080/internal/sse/drain"
+
+  if [ "$DRY_RUN" = "1" ]; then
+    dry_log "sse drain $service $url retry=${SSE_DRAIN_RETRY_SECONDS}s"
+    return 0
+  fi
+
+  compose exec -T "$service" curl -fsS -X POST "$url" >/dev/null
+}
+
+slot_sse_connection_count() {
+  slot="$1"
+  service="$(slot_service "$slot")"
+  url="http://localhost:8080/internal/sse/connections"
+
+  if [ "$DRY_RUN" = "1" ]; then
+    printf '%s\n' "${DRY_RUN_SSE_CONNECTIONS:-0}"
+    return 0
+  fi
+
+  compose exec -T "$service" curl -fsS "$url" 2>/dev/null | tr -d '[:space:]'
+}
+
+wait_for_slot_sse_drain() {
+  slot="$1"
+  service="$(slot_service "$slot")"
+  elapsed=0
+
+  if [ "$DRY_RUN" = "1" ]; then
+    dry_log "sse wait $service timeout=${SSE_DRAIN_TIMEOUT_SECONDS}s"
+  fi
+
+  while [ "$elapsed" -le "$SSE_DRAIN_TIMEOUT_SECONDS" ]; do
+    count="$(slot_sse_connection_count "$slot" || printf '%s\n' unknown)"
+    if [ "$count" = "0" ]; then
+      return 0
+    fi
+    sleep_seconds 1
+    elapsed=$((elapsed + 1))
+  done
+
+  return 1
 }
 
 stop_previous_slot_if_enabled() {
