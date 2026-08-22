@@ -36,7 +36,11 @@ public class SecurityConfig {
 				.authorizeHttpRequests(auth -> auth
 						.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 						.requestMatchers(HttpMethod.GET, "/healthz").permitAll()
-						.requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/prometheus").permitAll()
+						.requestMatchers(HttpMethod.GET,
+								"/actuator/health",
+								"/actuator/health/liveness",
+								"/actuator/health/readiness",
+								"/actuator/prometheus").permitAll()
 						.requestMatchers(HttpMethod.GET, "/api/v1/auth/csrf").permitAll()
 						.requestMatchers(HttpMethod.GET,
 								"/api/v1/platform/congestion",

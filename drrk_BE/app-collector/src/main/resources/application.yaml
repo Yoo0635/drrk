@@ -67,7 +67,6 @@ management:
       probes:
         enabled: true
     prometheus:
-      enabled: true
       access: read-only
   metrics:
     tags:
