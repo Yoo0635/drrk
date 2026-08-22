@@ -35,7 +35,10 @@ export function useCarrierCountSamples({
     useState<CarrierCountConnectionStatus>("connecting");
   const apiBaseUrlConfigured = baseUrl.trim().length > 0;
   const nowRef = useRef(now);
-  nowRef.current = now;
+
+  useEffect(() => {
+    nowRef.current = now;
+  }, [now]);
 
   useEffect(() => {
     let staleTimeout: ReturnType<typeof setTimeout> | null = null;

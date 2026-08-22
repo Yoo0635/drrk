@@ -100,6 +100,37 @@ describe("useCarrierCountSamples", () => {
     expect(FakeEventSource.instances[0].closed).toBe(true);
   });
 
+  it("uses the latest clock without reconnecting the SSE stream", async () => {
+    const firstNow = () => new Date("2026-08-13T05:30:00.000Z");
+    const secondNow = () => new Date("2026-08-13T05:31:00.000Z");
+    const { result, rerender } = renderHook(
+      ({ now }) =>
+        useCarrierCountSamples({
+          baseUrl: "http://localhost:8080",
+          EventSourceCtor: FakeEventSource as unknown as typeof EventSource,
+          now,
+        }),
+      { initialProps: { now: firstNow } },
+    );
+
+    rerender({ now: secondNow });
+
+    act(() => {
+      FakeEventSource.instances[0].emitCarrierCount({
+        n_carriers: 1,
+        score: null,
+        level: null,
+      });
+    });
+
+    await waitFor(() => {
+      expect(FakeEventSource.instances).toHaveLength(1);
+      expect(result.current.carrierSamples).toEqual([
+        { value: 1, timestamp: Date.parse("2026-08-13T05:31:00.000Z") },
+      ]);
+    });
+  });
+
   it("clears existing samples when no new carrier events arrive within the stale window", async () => {
     const { result } = renderHook(() =>
       useCarrierCountSamples({
