@@ -134,6 +134,32 @@ class InferenceSseBroadcasterTest {
 	}
 
 	@Test
+	void drainsActiveEmittersWithReconnectHint() {
+		CapturingEmitter first = new CapturingEmitter();
+		CapturingEmitter second = new CapturingEmitter();
+		broadcaster.subscribe(first);
+		broadcaster.subscribe(second);
+		first.clear();
+		second.clear();
+
+		int drained = broadcaster.drainActiveEmitters();
+
+		assertThat(drained).isEqualTo(2);
+		assertThat(broadcaster.activeEmitterCount()).isZero();
+		assertThat(first.events()).containsExactly("retry:1000\n:drain\n\n");
+		assertThat(second.events()).containsExactly("retry:1000\n:drain\n\n");
+	}
+
+	@Test
+	void reportsActiveEmitterCount() {
+		assertThat(broadcaster.activeEmitterCount()).isZero();
+
+		broadcaster.subscribe(new CapturingEmitter());
+
+		assertThat(broadcaster.activeEmitterCount()).isOne();
+	}
+
+	@Test
 	void keepsScoreWhileCongestionResultIsWithinCongestionMaxAge() {
 		// carrier snapshot은 5초 TTL, 혼잡도는 25초 TTL — 10초 주기 발행에도 score 유지
 		store.updateIfLatest(snapshot("8c530c6c-f819-4ad6-b687-760dc698c617", "desk01", "2026-08-13T05:00:10Z", 3));
