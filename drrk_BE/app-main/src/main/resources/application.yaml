@@ -1,6 +1,8 @@
 spring:
   application:
     name: main
+  lifecycle:
+    timeout-per-shutdown-phase: ${SPRING_LIFECYCLE_TIMEOUT_PER_SHUTDOWN_PHASE:60s}
   rabbitmq:
     listener:
       simple:
@@ -66,8 +68,10 @@ management:
       probes:
         enabled: true
     prometheus:
-      enabled: true
       access: read-only
   metrics:
     tags:
       application: ${spring.application.name}
+
+server:
+  shutdown: ${SERVER_SHUTDOWN:graceful}

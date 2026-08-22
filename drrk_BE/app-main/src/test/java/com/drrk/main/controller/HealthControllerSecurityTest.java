@@ -40,6 +40,9 @@ import org.springframework.test.web.servlet.MockMvc;
 		"spring.mail.password=test-password",
 		"inference.consumer.auto-startup=false",
 		"congestion.consumer.auto-startup=false",
+		"management.health.db.enabled=false",
+		"management.health.rabbit.enabled=false",
+		"management.health.redis.enabled=false",
 		"auth.jwt-secret=MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTI="
 })
 @AutoConfigureMockMvc
@@ -95,6 +98,13 @@ class HealthControllerSecurityTest {
 				.andExpect(jsonPath("$.status").value("UP"))
 				.andExpect(jsonPath("$", not(hasKey("password"))))
 				.andExpect(jsonPath("$", not(hasKey("secret"))));
+	}
+
+	@Test
+	void exposesActuatorReadinessWithoutAuthenticationForBlueGreenDeploy() throws Exception {
+		mockMvc.perform(get("/actuator/health/readiness"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.status").value("UP"));
 	}
 
 	@Test
