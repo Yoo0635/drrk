@@ -3,8 +3,11 @@ package com.drrk.main.consumer.congestion;
 import com.drrk.messaging.congestion.CongestionCalculatedMessage;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,19 +19,24 @@ import tools.jackson.databind.ObjectMapper;
 public class LatestAirportGuideStore implements CongestionResultHandler {
 
 	private static final Logger log = LoggerFactory.getLogger(LatestAirportGuideStore.class);
-	private static final String PAYLOAD_KEY = "drrk:main:sse:airport-guide:latest";
-	private static final String TIMESTAMP_KEY = "drrk:main:sse:airport-guide:latest:calculated-at";
-	private static final String UPDATE_IF_LATEST_SCRIPT = """
-			local current = redis.call('get', KEYS[2])
-			if (not current) or (tonumber(ARGV[1]) > tonumber(current)) then
-			  redis.call('set', KEYS[1], ARGV[2], 'EX', ARGV[3])
-			  redis.call('set', KEYS[2], ARGV[1], 'EX', ARGV[3])
+	private static final int HISTORY_LIMIT = 5;
+	private static final String HISTORY_KEY = "drrk:main:sse:airport-guide:latest-history";
+	private static final String LEGACY_PAYLOAD_KEY = "drrk:main:sse:airport-guide:latest";
+	private static final String UPDATE_HISTORY_SCRIPT = """
+			redis.call('zadd', KEYS[1], tonumber(ARGV[1]), ARGV[2])
+			local total = redis.call('zcard', KEYS[1])
+			if total > tonumber(ARGV[4]) then
+			  redis.call('zremrangebyrank', KEYS[1], 0, total - tonumber(ARGV[4]) - 1)
+			end
+			redis.call('expire', KEYS[1], tonumber(ARGV[3]))
+			local rank = redis.call('zrevrank', KEYS[1], ARGV[2])
+			if rank and rank < tonumber(ARGV[4]) then
 			  return 1
 			end
 			return 0
 			""";
 
-	private final AtomicReference<CongestionCalculatedMessage> latest = new AtomicReference<>();
+	private final AtomicReference<List<CongestionCalculatedMessage>> recent = new AtomicReference<>(List.of());
 	private final StringRedisTemplate redis;
 	private final ObjectMapper objectMapper;
 	private final Duration redisRetention;
@@ -53,15 +61,11 @@ public class LatestAirportGuideStore implements CongestionResultHandler {
 	public void handle(CongestionCalculatedMessage message) {
 		if (CongestionCalculatedMessage.hasScore(message.status())) {
 			if (redis != null) {
-				updateRedisIfLatest(message);
+				updateRedisHistory(message);
 				return;
 			}
-			CongestionCalculatedMessage stored = latest.updateAndGet(
-					current -> current == null || message.calculatedAt().isAfter(current.calculatedAt())
-					? message
-					: current
-			);
-			if (stored == message) {
+			List<CongestionCalculatedMessage> stored = recent.updateAndGet(current -> withLatestFive(current, message));
+			if (stored.contains(message)) {
 				log.info("[AIRPORT GUIDE UPDATED] calculatedAt={} version={} score={} trainCount={}",
 						message.calculatedAt(),
 						message.calculationVersion(),
@@ -75,10 +79,14 @@ public class LatestAirportGuideStore implements CongestionResultHandler {
 	}
 
 	public Optional<CongestionCalculatedMessage> latest() {
+		return recent().stream().findFirst();
+	}
+
+	List<CongestionCalculatedMessage> recent() {
 		if (redis != null) {
-			return latestFromRedis();
+			return recentFromRedis();
 		}
-		return Optional.ofNullable(latest.get());
+		return recent.get();
 	}
 
 	public Optional<CongestionCalculatedMessage> latestFresh(Instant now, Duration maxAge) {
@@ -90,13 +98,14 @@ public class LatestAirportGuideStore implements CongestionResultHandler {
 		return !timestamp.isAfter(now) && Duration.between(timestamp, now).compareTo(maxAge) <= 0;
 	}
 
-	private void updateRedisIfLatest(CongestionCalculatedMessage message) {
+	private void updateRedisHistory(CongestionCalculatedMessage message) {
 		Long stored = redis.execute(
-				new DefaultRedisScript<>(UPDATE_IF_LATEST_SCRIPT, Long.class),
-				List.of(PAYLOAD_KEY, TIMESTAMP_KEY),
+				new DefaultRedisScript<>(UPDATE_HISTORY_SCRIPT, Long.class),
+				List.of(HISTORY_KEY),
 				String.valueOf(message.calculatedAt().toEpochMilli()),
 				toJson(message),
-				String.valueOf(Math.max(1L, redisRetention.toSeconds()))
+				String.valueOf(Math.max(1L, redisRetention.toSeconds())),
+				String.valueOf(HISTORY_LIMIT)
 		);
 		if (Long.valueOf(1L).equals(stored)) {
 			log.info("[AIRPORT GUIDE UPDATED] calculatedAt={} version={} score={} trainCount={}",
@@ -107,17 +116,47 @@ public class LatestAirportGuideStore implements CongestionResultHandler {
 		}
 	}
 
-	private Optional<CongestionCalculatedMessage> latestFromRedis() {
-		String value = redis.opsForValue().get(PAYLOAD_KEY);
+	private List<CongestionCalculatedMessage> recentFromRedis() {
+		Set<String> values = redis.opsForZSet().reverseRange(HISTORY_KEY, 0, HISTORY_LIMIT - 1);
+		if (values != null && !values.isEmpty()) {
+			return values.stream()
+					.map(this::fromJson)
+					.flatMap(Optional::stream)
+					.toList();
+		}
+		return legacyLatestFromRedis()
+				.map(List::of)
+				.orElseGet(List::of);
+	}
+
+	private Optional<CongestionCalculatedMessage> legacyLatestFromRedis() {
+		String value = redis.opsForValue().get(LEGACY_PAYLOAD_KEY);
 		if (value == null) {
 			return Optional.empty();
 		}
+		return fromJson(value);
+	}
+
+	private Optional<CongestionCalculatedMessage> fromJson(String value) {
 		try {
 			return Optional.of(objectMapper.readValue(value, CongestionCalculatedMessage.class));
 		} catch (JacksonException exception) {
 			log.warn("[AIRPORT GUIDE SKIPPED] reason=INVALID_REDIS_PAYLOAD detail={}", exception.getMessage());
 			return Optional.empty();
 		}
+	}
+
+	private List<CongestionCalculatedMessage> withLatestFive(
+			List<CongestionCalculatedMessage> current,
+			CongestionCalculatedMessage message
+	) {
+		List<CongestionCalculatedMessage> next = new ArrayList<>(current.size() + 1);
+		next.add(message);
+		next.addAll(current);
+		return next.stream()
+				.sorted(Comparator.comparing(CongestionCalculatedMessage::calculatedAt).reversed())
+				.limit(HISTORY_LIMIT)
+				.toList();
 	}
 
 	private String toJson(CongestionCalculatedMessage message) {

@@ -1,6 +1,7 @@
 package com.drrk.main.consumer.congestion;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertIterableEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.drrk.messaging.congestion.CongestionCalculatedMessage;
@@ -13,21 +14,40 @@ import org.junit.jupiter.api.Test;
 class LatestAirportGuideStoreTest {
 
 	@Test
-	void keepsOnlyTheNewestCalculatedResultAndIgnoresPendingMessages() {
+	void keepsOnlyTheNewestFiveCalculatedResultsAndIgnoresPendingMessages() {
 		LatestAirportGuideStore store = new LatestAirportGuideStore();
-		Instant newerTime = Instant.parse("2026-08-13T05:01:00Z");
-		CongestionCalculatedMessage newer = calculatedAt(newerTime);
+		Instant base = Instant.parse("2026-08-13T05:01:00Z");
+		List<CongestionCalculatedMessage> messages = List.of(
+				calculatedAt(base),
+				calculatedAt(base.plusSeconds(1)),
+				calculatedAt(base.plusSeconds(2)),
+				calculatedAt(base.plusSeconds(3)),
+				calculatedAt(base.plusSeconds(4)),
+				calculatedAt(base.plusSeconds(5))
+		);
 
-		store.handle(newer);
-		store.handle(calculatedAt(newerTime.minusSeconds(1)));
+		messages.forEach(store::handle);
+		store.handle(calculatedAt(base.minusSeconds(1)));
 		store.handle(CongestionCalculatedMessage.formulaPending(
 				UUID.randomUUID(),
-				newerTime.plusSeconds(1),
+				base.plusSeconds(6),
 				inputs()
 		));
 
 		assertTrue(store.latest().isPresent());
-		assertEquals(newer.messageId(), store.latest().orElseThrow().messageId());
+		assertEquals(messages.get(5).messageId(), store.latest().orElseThrow().messageId());
+		assertIterableEquals(
+				List.of(
+						messages.get(5).messageId(),
+						messages.get(4).messageId(),
+						messages.get(3).messageId(),
+						messages.get(2).messageId(),
+						messages.get(1).messageId()
+				),
+				store.recent().stream()
+						.map(CongestionCalculatedMessage::messageId)
+						.toList()
+		);
 	}
 
 	@Test
