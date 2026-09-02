@@ -45,6 +45,10 @@ flowchart LR
 4. `app-main`은 REST API와 SSE로 여객 화면 및 운영 대시보드에 최신 정보를 전달합니다.
 5. 비정상 메시지는 DLQ로 격리하고, 애플리케이션 지표는 Prometheus와 Grafana에서 확인합니다.
 
+### 전체 아키텍처
+
+![DRRK 전체 시스템 아키텍처](docs/images/system-architecture.png)
+
 ---
 
 ## 3. 저장소 구조
