@@ -3,6 +3,7 @@ package com.drrk.main.consumer.inference;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.drrk.main.consumer.congestion.LatestAirportGuideStore;
+import com.drrk.main.consumer.congestion.CongestionDeliveryStatus;
 import com.drrk.messaging.congestion.CongestionCalculatedMessage;
 import com.drrk.messaging.congestion.CongestionInputReferences;
 import java.io.IOException;
@@ -63,6 +64,23 @@ class InferenceSseBroadcasterTest {
 		);
 		assertThat(second.events()).containsExactly(
 				"event:carrier-count\nid:8c530c6c-f819-4ad6-b687-760dc698c617\ndata:{\"n_carriers\":3,\"score\":0.375,\"level\":\"LOW\"}\n\n"
+		);
+	}
+
+	@Test
+	void broadcastsRecoveredCongestionWithItsOriginalCalculatedTimestamp() {
+		CapturingEmitter emitter = new CapturingEmitter();
+		broadcaster.subscribe(emitter);
+		emitter.clear();
+		CongestionCalculatedMessage message = calculatedCongestion("2026-08-13T05:00:00Z");
+
+		broadcaster.publish(message, CongestionDeliveryStatus.RECOVERED_LATE, 2);
+
+		assertThat(emitter.events()).containsExactly(
+				"event:congestion-delivery\nid:" + message.messageId()
+						+ "\ndata:{\"messageId\":\"" + message.messageId()
+						+ "\",\"calculatedAt\":\"2026-08-13T05:00:00Z\",\"score\":0.375,\"level\":\"LOW\","
+						+ "\"deliveryStatus\":\"RECOVERED_LATE\",\"retryCount\":2}\n\n"
 		);
 	}
 

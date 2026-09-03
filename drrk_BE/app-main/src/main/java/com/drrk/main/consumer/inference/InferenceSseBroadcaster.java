@@ -1,6 +1,9 @@
 package com.drrk.main.consumer.inference;
 
 import com.drrk.main.consumer.congestion.LatestAirportGuideStore;
+import com.drrk.main.consumer.congestion.CongestionDeliveryPublisher;
+import com.drrk.main.consumer.congestion.CongestionDeliveryStatus;
+import com.drrk.messaging.congestion.CongestionCalculatedMessage;
 import java.io.IOException;
 import java.time.Clock;
 import java.time.Duration;
@@ -19,10 +22,11 @@ import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 
 @Component
-public class InferenceSseBroadcaster {
+public class InferenceSseBroadcaster implements CongestionDeliveryPublisher {
 
 	private static final Logger log = LoggerFactory.getLogger(InferenceSseBroadcaster.class);
 	private static final String EVENT_NAME = "carrier-count";
+	private static final String CONGESTION_EVENT_NAME = "congestion-delivery";
 	private static final Duration DRAIN_RETRY = Duration.ofSeconds(1);
 
 	private final LatestInferenceSnapshotStore store;
@@ -101,6 +105,33 @@ public class InferenceSseBroadcaster {
 		}
 	}
 
+	@Override
+	public void publish(
+			CongestionCalculatedMessage message,
+			CongestionDeliveryStatus deliveryStatus,
+			int retryCount
+	) {
+		String payload = toJson(new CongestionDeliveryStreamResponse(
+				message.messageId(),
+				message.calculatedAt(),
+				message.score(),
+				message.level(),
+				deliveryStatus,
+				retryCount
+		));
+		for (SseEmitter emitter : List.copyOf(emitters)) {
+			try {
+				emitter.send(SseEmitter.event()
+						.name(CONGESTION_EVENT_NAME)
+						.id(message.messageId())
+						.data(payload));
+			} catch (IOException | IllegalStateException exception) {
+				log.debug("[CONGESTION SSE DISCONNECTED] reason={}", exception.getMessage());
+				removeAndComplete(emitter);
+			}
+		}
+	}
+
 	private void sendCurrentState(SseEmitter emitter) {
 		List<LatestInferenceSnapshot> snapshots = currentSnapshots();
 		if (snapshots.isEmpty()) {
@@ -161,6 +192,14 @@ public class InferenceSseBroadcaster {
 			);
 		} catch (JacksonException exception) {
 			throw new IllegalStateException("failed to serialize carrier count SSE payload", exception);
+		}
+	}
+
+	private String toJson(CongestionDeliveryStreamResponse response) {
+		try {
+			return objectMapper.writeValueAsString(response);
+		} catch (JacksonException exception) {
+			throw new IllegalStateException("failed to serialize congestion delivery SSE payload", exception);
 		}
 	}
 

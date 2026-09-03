@@ -47,6 +47,32 @@ class CongestionRabbitConfigurationTest {
 	}
 
 	@Test
+	void declaresDurableRetryQueuesWithStageTtlAndOriginalDeadLetterRouting() {
+		Queue oneSecond = configuration.congestionRetryOneSecondQueue();
+		Queue fiveSeconds = configuration.congestionRetryFiveSecondsQueue();
+		Queue fifteenSeconds = configuration.congestionRetryFifteenSecondsQueue();
+
+		assertRetryQueue(oneSecond, CongestionRetryNames.ONE_SECOND_QUEUE, 1_000L);
+		assertRetryQueue(fiveSeconds, CongestionRetryNames.FIVE_SECONDS_QUEUE, 5_000L);
+		assertRetryQueue(fifteenSeconds, CongestionRetryNames.FIFTEEN_SECONDS_QUEUE, 15_000L);
+	}
+
+	@Test
+	void bindsEveryRetryQueueToItsOwnRoutingKey() {
+		DirectExchange exchange = configuration.congestionRetryExchange();
+
+		assertThat(configuration.congestionRetryOneSecondBinding(
+				configuration.congestionRetryOneSecondQueue(), exchange
+		).getRoutingKey()).isEqualTo(CongestionRetryNames.ONE_SECOND_ROUTING_KEY);
+		assertThat(configuration.congestionRetryFiveSecondsBinding(
+				configuration.congestionRetryFiveSecondsQueue(), exchange
+		).getRoutingKey()).isEqualTo(CongestionRetryNames.FIVE_SECONDS_ROUTING_KEY);
+		assertThat(configuration.congestionRetryFifteenSecondsBinding(
+				configuration.congestionRetryFifteenSecondsQueue(), exchange
+		).getRoutingKey()).isEqualTo(CongestionRetryNames.FIFTEEN_SECONDS_ROUTING_KEY);
+	}
+
+	@Test
 	void configuresSingleManualAckConsumerWithoutAutomaticRequeue() {
 		CachingConnectionFactory connectionFactory = new CachingConnectionFactory("localhost");
 		SimpleRabbitListenerContainerFactory factory = configuration.congestionRabbitListenerContainerFactory(
@@ -61,8 +87,17 @@ class CongestionRabbitConfigurationTest {
 
 		assertThat(container.getAcknowledgeMode()).isEqualTo(AcknowledgeMode.MANUAL);
 		assertThat(ReflectionTestUtils.getField(container, "concurrentConsumers")).isEqualTo(1);
-		assertThat(ReflectionTestUtils.getField(container, "prefetchCount")).isEqualTo(1);
+		assertThat(ReflectionTestUtils.getField(container, "prefetchCount")).isEqualTo(5);
 		assertThat(ReflectionTestUtils.getField(container, "defaultRequeueRejected")).isEqualTo(false);
 		connectionFactory.destroy();
+	}
+
+	private void assertRetryQueue(Queue queue, String expectedName, long expectedTtl) {
+		assertThat(queue.getName()).isEqualTo(expectedName);
+		assertThat(queue.isDurable()).isTrue();
+		assertThat(((Number) queue.getArguments().get("x-message-ttl")).longValue()).isEqualTo(expectedTtl);
+		assertThat(queue.getArguments())
+				.containsEntry("x-dead-letter-exchange", CongestionRabbitNames.EXCHANGE)
+				.containsEntry("x-dead-letter-routing-key", CongestionRabbitNames.ROUTING_KEY);
 	}
 }
