@@ -1,6 +1,11 @@
-import type { CarrierCountSnapshot } from "./types/inference";
+import type {
+  CarrierCountSnapshot,
+  CongestionDeliverySnapshot,
+  CongestionDeliveryStatus,
+} from "./types/inference";
 
 export const CARRIER_SAMPLE_COUNT = 30;
+const SCORE_BUCKET_MS = 5_000;
 
 export interface CongestionSample {
   value: 0 | 1;
@@ -8,9 +13,12 @@ export interface CongestionSample {
 }
 
 export interface ScoreSample {
+  messageId: string;
   score: number;
   level: string;
   timestamp: number;
+  deliveryStatus: CongestionDeliveryStatus;
+  retryCount: number;
 }
 
 export function carrierSnapshotToSample({
@@ -23,22 +31,21 @@ export function carrierSnapshotToSample({
   };
 }
 
-export function carrierSnapshotToScoreSample({
-  congestionScore,
-  congestionLevel,
-  receivedAt,
-}: Pick<
-  CarrierCountSnapshot,
-  "congestionScore" | "congestionLevel" | "receivedAt"
->): ScoreSample | null {
-  if (congestionScore === null || congestionLevel === null) {
-    return null;
-  }
-
+export function congestionDeliveryToScoreSample({
+  messageId,
+  score,
+  level,
+  calculatedAt,
+  deliveryStatus,
+  retryCount,
+}: CongestionDeliverySnapshot): ScoreSample {
   return {
-    score: congestionScore,
-    level: congestionLevel,
-    timestamp: receivedAt.getTime(),
+    messageId,
+    score,
+    level,
+    timestamp: toScoreBucket(calculatedAt.getTime()),
+    deliveryStatus,
+    retryCount,
   };
 }
 
@@ -54,7 +61,7 @@ export function pushCarrierSample(
   return [...samples, sample].slice(-limit);
 }
 
-export function pushScoreSample(
+export function upsertScoreSample(
   samples: ScoreSample[],
   sample: ScoreSample,
   limit = CARRIER_SAMPLE_COUNT,
@@ -63,7 +70,15 @@ export function pushScoreSample(
     return samples;
   }
 
-  return [...samples, sample].slice(-limit);
+  const bucketed = { ...sample, timestamp: toScoreBucket(sample.timestamp) };
+  const retained = samples.filter(
+    (current) =>
+      current.messageId !== bucketed.messageId &&
+      current.timestamp !== bucketed.timestamp,
+  );
+  return [...retained, bucketed]
+    .sort((left, right) => left.timestamp - right.timestamp)
+    .slice(-limit);
 }
 
 function isValidCongestionSample(sample: CongestionSample) {
@@ -79,6 +94,14 @@ function isValidScoreSample(sample: ScoreSample) {
     sample.score >= 0 &&
     sample.score <= 1 &&
     sample.level.trim().length > 0 &&
-    Number.isFinite(sample.timestamp)
+    Number.isFinite(sample.timestamp) &&
+    sample.messageId.trim().length > 0 &&
+    (sample.deliveryStatus === "LIVE" || sample.deliveryStatus === "RECOVERED_LATE") &&
+    Number.isInteger(sample.retryCount) &&
+    sample.retryCount >= 0
   );
+}
+
+function toScoreBucket(timestamp: number) {
+  return Math.floor(timestamp / SCORE_BUCKET_MS) * SCORE_BUCKET_MS;
 }

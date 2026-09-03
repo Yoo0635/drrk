@@ -2,10 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { createCarrierCountStream } from "../api/carrierCountStream";
 import {
   carrierSnapshotToSample,
-  carrierSnapshotToScoreSample,
+  congestionDeliveryToScoreSample,
   pushCarrierSample,
   type CongestionSample,
-  pushScoreSample,
+  upsertScoreSample,
   type ScoreSample,
 } from "../carrierSamples";
 import type { CarrierCountConnectionStatus } from "../types/inference";
@@ -68,10 +68,12 @@ export function useCarrierCountSamples({
         setCarrierSamples((current) =>
           pushCarrierSample(current, carrierSnapshotToSample(snapshot)),
         );
-        const scoreSample = carrierSnapshotToScoreSample(snapshot);
-        if (scoreSample !== null) {
-          setScoreSamples((current) => pushScoreSample(current, scoreSample));
-        }
+      },
+      onCongestionDelivery: (snapshot) => {
+        resetStaleTimeout();
+        setScoreSamples((current) =>
+          upsertScoreSample(current, congestionDeliveryToScoreSample(snapshot)),
+        );
       },
     });
 
