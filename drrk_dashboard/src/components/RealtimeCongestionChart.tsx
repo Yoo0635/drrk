@@ -139,15 +139,34 @@ export function RealtimeCongestionChart({
 
     const xAt = (index: number, start: number) =>
       start + (halfWidth * index) / (CARRIER_SAMPLE_COUNT - 1);
+    const firstScoreTimestamp = scoreSamples.at(0)?.timestamp ?? 0;
+    const lastScoreTimestamp = scoreSamples.at(-1)?.timestamp ?? firstScoreTimestamp;
+    const scoreTimeSpan = lastScoreTimestamp - firstScoreTimestamp;
+    const scoreXAt = (timestamp: number) => {
+      if (scoreSamples.length <= 1 || scoreTimeSpan <= 0) {
+        return rightEnd;
+      }
+      return rightStart + (halfWidth * (timestamp - firstScoreTimestamp)) / scoreTimeSpan;
+    };
     const carrierY = (value: 0 | 1) => PAD.t + (1 - value) * innerHeight;
     const scoreY = (score: number) => PAD.t + (1 - score) * innerHeight;
 
     const carrierPoints = carrierSamples
       .map((sample, index) => `${xAt(index, leftStart)},${carrierY(sample.value)}`)
       .join(" ");
-    const scorePoints = scoreSamples
-      .map((sample, index) => `${xAt(index, rightStart)},${scoreY(sample.score)}`)
-      .join(" ");
+    const scoreSegments = scoreSamples.slice(1).map((sample, index) => {
+      const previous = scoreSamples[index];
+      return {
+        key: `${previous.messageId}-${sample.messageId}`,
+        x1: scoreXAt(previous.timestamp),
+        y1: scoreY(previous.score),
+        x2: scoreXAt(sample.timestamp),
+        y2: scoreY(sample.score),
+        recovered:
+          previous.deliveryStatus === "RECOVERED_LATE" ||
+          sample.deliveryStatus === "RECOVERED_LATE",
+      };
+    });
 
     return {
       innerHeight,
@@ -158,21 +177,20 @@ export function RealtimeCongestionChart({
       carrierY,
       scoreY,
       carrierPoints,
-      scorePoints,
+      scoreSegments,
       carrierArea:
         carrierPoints.length > 0
           ? `${leftStart},${PAD.t + innerHeight} ${carrierPoints} ${leftEnd},${PAD.t + innerHeight}`
           : "",
-      scoreArea:
-        scorePoints.length > 0
-          ? `${rightStart},${PAD.t + innerHeight} ${scorePoints} ${rightEnd},${PAD.t + innerHeight}`
-          : "",
       xAt,
+      scoreXAt,
       /**
        * 라벨을 그릴 인덱스. 30개를 모두 그리면 글씨가 겹치므로
        * 레벨이 바뀌는 지점과 현재값만 남기고, 그마저도 너무 붙으면 생략한다.
        */
-      labeledIndices: pickLabeledIndices(scoreSamples, (index) => xAt(index, rightStart)),
+      labeledIndices: pickLabeledIndices(scoreSamples, (index) =>
+        scoreXAt(scoreSamples[index].timestamp),
+      ),
     };
   }, [carrierSamples, scoreSamples]);
 
@@ -276,9 +294,6 @@ export function RealtimeCongestionChart({
         {graph.carrierArea.length > 0 && (
           <polygon points={graph.carrierArea} fill={`${leftAccent}18`} />
         )}
-        {graph.scoreArea.length > 0 && (
-          <polygon points={graph.scoreArea} fill={`${rightAccent}16`} />
-        )}
 
         {graph.carrierPoints.length > 0 && (
           <polyline
@@ -290,16 +305,21 @@ export function RealtimeCongestionChart({
             strokeLinecap="round"
           />
         )}
-        {graph.scorePoints.length > 0 && (
-          <polyline
-            points={graph.scorePoints}
+        {graph.scoreSegments.map((segment) => (
+          <line
+            key={segment.key}
+            data-series="score-segment"
+            x1={segment.x1}
+            y1={segment.y1}
+            x2={segment.x2}
+            y2={segment.y2}
             fill="none"
             stroke={rightAccent}
             strokeWidth={3}
-            strokeLinejoin="round"
             strokeLinecap="round"
+            strokeDasharray={segment.recovered ? "6 5" : undefined}
           />
-        )}
+        ))}
 
         {carrierSamples.map((sample, index) => (
           <circle
@@ -314,7 +334,7 @@ export function RealtimeCongestionChart({
         ))}
 
         {scoreSamples.map((sample, index) => {
-          const x = graph.xAt(index, graph.rightStart);
+          const x = graph.scoreXAt(sample.timestamp);
           const y = graph.scoreY(sample.score);
           const color = levelColor(sample.level);
           const isLast = index === scoreSamples.length - 1;
@@ -327,15 +347,22 @@ export function RealtimeCongestionChart({
             x > graph.rightEnd - 18 ? "end" : x < graph.rightStart + 18 ? "start" : "middle";
 
           return (
-            <g key={`score-${sample.timestamp}-${index}`}>
+            <g key={sample.messageId}>
               <circle
+                data-series="score-point"
                 cx={x}
                 cy={y}
                 r={isLast ? 5 : 3}
                 fill={color}
                 stroke={C.panel}
                 strokeWidth={1.5}
-              />
+              >
+                <title>
+                  {sample.deliveryStatus === "RECOVERED_LATE"
+                    ? `재시도 ${sample.retryCount}회 후 복구`
+                    : "실시간 수신"}
+                </title>
+              </circle>
               {showLabel && (
                 <text
                   x={x}

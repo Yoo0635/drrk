@@ -2,17 +2,24 @@ package com.drrk.main.consumer.congestion;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
+import com.drrk.messaging.congestion.CongestionCalculatedMessage;
 import com.rabbitmq.client.Channel;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.time.Instant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import org.springframework.amqp.AmqpException;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageProperties;
+import org.springframework.dao.QueryTimeoutException;
+import org.springframework.data.redis.RedisConnectionFailureException;
 import tools.jackson.databind.ObjectMapper;
 
 class CongestionResultListenerTest {
@@ -21,12 +28,22 @@ class CongestionResultListenerTest {
 	private static final long DELIVERY_TAG = 42L;
 
 	private final CongestionResultHandler handler = Mockito.mock(CongestionResultHandler.class);
+	private final CongestionRetryPublisher retryPublisher = Mockito.mock(CongestionRetryPublisher.class);
+	private final CongestionDeliveryPublisher deliveryPublisher = Mockito.mock(CongestionDeliveryPublisher.class);
 	private final Channel channel = Mockito.mock(Channel.class);
+	private SimpleMeterRegistry meterRegistry;
 	private CongestionResultListener listener;
 
 	@BeforeEach
 	void setUp() {
-		listener = new CongestionResultListener(new CongestionCalculatedMessageParser(new ObjectMapper()), handler);
+		meterRegistry = new SimpleMeterRegistry();
+		listener = new CongestionResultListener(
+				new CongestionCalculatedMessageParser(new ObjectMapper()),
+				handler,
+				retryPublisher,
+				deliveryPublisher,
+				new CongestionReliabilityMetrics(meterRegistry)
+		);
 	}
 
 	@Test
@@ -36,6 +53,37 @@ class CongestionResultListenerTest {
 		verify(handler).handle(any());
 		verify(channel).basicAck(DELIVERY_TAG, false);
 		verify(channel, never()).basicReject(DELIVERY_TAG, false);
+		verify(retryPublisher, never()).publish(any(), anyInt(), any());
+	}
+
+	@Test
+	void publishesLiveCalculatedResultAfterSuccessfulHandling() throws Exception {
+		listener.consume(message(calculatedJson(), MESSAGE_ID), channel);
+
+		verify(deliveryPublisher).publish(
+				any(CongestionCalculatedMessage.class),
+				eq(CongestionDeliveryStatus.LIVE),
+				eq(0)
+		);
+		verify(channel).basicAck(DELIVERY_TAG, false);
+	}
+
+	@Test
+	void publishesRecoveredCalculatedResultWithOriginalTimestampAfterRetrySucceeds() throws Exception {
+		listener.consume(message(calculatedJson(), MESSAGE_ID, 2), channel);
+
+		var messageCaptor = org.mockito.ArgumentCaptor.forClass(CongestionCalculatedMessage.class);
+		verify(deliveryPublisher).publish(
+				messageCaptor.capture(),
+				eq(CongestionDeliveryStatus.RECOVERED_LATE),
+				eq(2)
+		);
+		org.assertj.core.api.Assertions.assertThat(messageCaptor.getValue().calculatedAt())
+				.isEqualTo(Instant.parse("2026-08-13T03:00:00Z"));
+		verify(channel).basicAck(DELIVERY_TAG, false);
+		org.assertj.core.api.Assertions.assertThat(counter(
+				"drrk.congestion.retry.recovered", "retry_count", "2"
+		)).isEqualTo(1.0);
 	}
 
 	@Test
@@ -57,34 +105,98 @@ class CongestionResultListenerTest {
 	}
 
 	@Test
-	void retriesTransientHandlerFailureUpToThreeTimesThenAcknowledges() throws Exception {
-		doThrow(new IllegalStateException("temporary"))
-				.doThrow(new IllegalStateException("temporary"))
-				.doNothing()
-				.when(handler).handle(any());
+	void publishesFirstRedisFailureToOneSecondRetryQueueThenAcknowledges() throws Exception {
+		RedisConnectionFailureException failure = new RedisConnectionFailureException("temporary");
+		doThrow(failure).when(handler).handle(any());
 
 		listener.consume(message(validJson(), MESSAGE_ID), channel);
 
-		verify(handler, times(3)).handle(any());
+		verify(handler).handle(any());
+		verify(retryPublisher).publish(any(Message.class), eq(1), eq(failure));
+		verify(channel).basicAck(DELIVERY_TAG, false);
+		verify(channel, never()).basicReject(DELIVERY_TAG, false);
+		org.assertj.core.api.Assertions.assertThat(counter(
+				"drrk.congestion.retry.published", "retry_count", "1"
+		)).isEqualTo(1.0);
+	}
+
+	@Test
+	void advancesRedisFailureToNextRetryStage() throws Exception {
+		RedisConnectionFailureException failure = new RedisConnectionFailureException("temporary");
+		doThrow(failure).when(handler).handle(any());
+
+		listener.consume(message(validJson(), MESSAGE_ID, 1), channel);
+
+		verify(retryPublisher).publish(any(Message.class), eq(2), eq(failure));
+		verify(channel).basicAck(DELIVERY_TAG, false);
+	}
+
+	@Test
+	void publishesRedisTimeoutToRetryQueueThenAcknowledges() throws Exception {
+		QueryTimeoutException failure = new QueryTimeoutException("command timeout");
+		doThrow(failure).when(handler).handle(any());
+
+		listener.consume(message(validJson(), MESSAGE_ID), channel);
+
+		verify(retryPublisher).publish(any(Message.class), eq(1), eq(failure));
 		verify(channel).basicAck(DELIVERY_TAG, false);
 		verify(channel, never()).basicReject(DELIVERY_TAG, false);
 	}
 
 	@Test
-	void rejectsAfterThirdHandlerFailure() throws Exception {
-		doThrow(new IllegalStateException("temporary")).when(handler).handle(any());
+	void rejectsRedisFailureAfterThirdRetry() throws Exception {
+		doThrow(new RedisConnectionFailureException("temporary")).when(handler).handle(any());
+
+		listener.consume(message(validJson(), MESSAGE_ID, 3), channel);
+
+		verify(handler).handle(any());
+		verify(retryPublisher, never()).publish(any(), anyInt(), any());
+		verify(channel).basicReject(DELIVERY_TAG, false);
+		verify(channel, never()).basicAck(DELIVERY_TAG, false);
+		org.assertj.core.api.Assertions.assertThat(counter(
+				"drrk.congestion.dead.lettered", "reason", "retries_exhausted"
+		)).isEqualTo(1.0);
+	}
+
+	@Test
+	void rejectsPermanentHandlerFailureWithoutRetry() throws Exception {
+		doThrow(new IllegalStateException("permanent")).when(handler).handle(any());
 
 		listener.consume(message(validJson(), MESSAGE_ID), channel);
 
-		verify(handler, times(3)).handle(any());
+		verify(retryPublisher, never()).publish(any(), anyInt(), any());
 		verify(channel).basicReject(DELIVERY_TAG, false);
+	}
+
+	@Test
+	void requeuesOriginalDeliveryWhenRetryPublishFails() throws Exception {
+		RedisConnectionFailureException redisFailure = new RedisConnectionFailureException("temporary");
+		doThrow(redisFailure).when(handler).handle(any());
+		doThrow(new AmqpException("publish failed"))
+				.when(retryPublisher).publish(any(), eq(1), eq(redisFailure));
+
+		listener.consume(message(validJson(), MESSAGE_ID), channel);
+
+		verify(channel).basicNack(DELIVERY_TAG, false, true);
 		verify(channel, never()).basicAck(DELIVERY_TAG, false);
+		verify(channel, never()).basicReject(DELIVERY_TAG, false);
 	}
 
 	private Message message(String payload, String messageId) {
+		return message(payload, messageId, 0);
+	}
+
+	private double counter(String name, String tagKey, String tagValue) {
+		return meterRegistry.get(name).tag(tagKey, tagValue).counter().count();
+	}
+
+	private Message message(String payload, String messageId, int retryCount) {
 		MessageProperties properties = new MessageProperties();
 		properties.setMessageId(messageId);
 		properties.setDeliveryTag(DELIVERY_TAG);
+		if (retryCount > 0) {
+			properties.setHeader(CongestionRetryPublisher.RETRY_COUNT_HEADER, retryCount);
+		}
 		return new Message(payload.getBytes(UTF_8), properties);
 	}
 
@@ -104,6 +216,37 @@ class CongestionResultListenerTest {
 				  "forecastLoad": null,
 				  "projectedScore": null,
 				  "lastTrainDepartureAt": null,
+				  "inputs": {
+				    "arrivalStatusCollectedAt": "2026-08-13T02:59:00Z",
+				    "arrivalStatusItemCount": 2,
+				    "passengerForecastCollectedAt": "2026-08-13T02:59:00Z",
+				    "passengerForecastItemCount": 1,
+				    "railroadOperationCollectedAt": "2026-08-13T02:59:00Z",
+				    "railroadOperationItemCount": 3,
+				    "modelMessageId": "468c59d4-3b22-44e1-91ed-67b6290fa4a9",
+				    "modelMeasuredAt": "2026-08-13T02:59:50Z"
+				  },
+				  "railroadArrivals": []
+				}
+				""";
+	}
+
+	private String calculatedJson() {
+		return """
+				{
+				  "messageId": "8c530c6c-f819-4ad6-b687-760dc698c617",
+				  "schemaVersion": "5.0",
+				  "calculatedAt": "2026-08-13T03:00:00Z",
+				  "calculationVersion": "platform-congestion-v2",
+				  "status": "CALCULATED",
+				  "sensorDetected": false,
+				  "score": 0.375,
+				  "level": "LOW",
+				  "currentLoad": 12.0,
+				  "capacity": 48,
+				  "forecastLoad": 6.0,
+				  "projectedScore": 0.375,
+				  "lastTrainDepartureAt": "2026-08-13T02:55:00Z",
 				  "inputs": {
 				    "arrivalStatusCollectedAt": "2026-08-13T02:59:00Z",
 				    "arrivalStatusItemCount": 2,

@@ -4,6 +4,7 @@ spring:
   lifecycle:
     timeout-per-shutdown-phase: ${SPRING_LIFECYCLE_TIMEOUT_PER_SHUTDOWN_PHASE:60s}
   rabbitmq:
+    publisher-confirm-type: correlated
     listener:
       simple:
         default-requeue-rejected: false
@@ -44,6 +45,8 @@ auth:
 congestion:
   consumer:
     auto-startup: ${CONGESTION_CONSUMER_AUTO_STARTUP:true}
+  retry:
+    publisher-confirm-timeout: ${CONGESTION_RETRY_PUBLISHER_CONFIRM_TIMEOUT:PT5S}
 
 inference:
   consumer:

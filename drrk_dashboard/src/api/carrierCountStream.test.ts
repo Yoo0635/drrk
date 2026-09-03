@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createCarrierCountStream } from "./carrierCountStream";
-import type { CarrierCountSnapshot } from "../types/inference";
+import type { CarrierCountSnapshot, CongestionDeliverySnapshot } from "../types/inference";
 
 type Listener = (event: MessageEvent) => void;
 
@@ -30,6 +30,14 @@ class FakeEventSource {
       lastEventId,
     });
     this.listeners.get("carrier-count")?.forEach((listener) => listener(event));
+  }
+
+  emitCongestionDelivery(data: unknown, lastEventId = "congestion-1") {
+    const event = new MessageEvent("congestion-delivery", {
+      data: typeof data === "string" ? data : JSON.stringify(data),
+      lastEventId,
+    });
+    this.listeners.get("congestion-delivery")?.forEach((listener) => listener(event));
   }
 
   close() {
@@ -66,6 +74,35 @@ describe("createCarrierCountStream", () => {
       "http://localhost:8080/api/v1/inference/carriers/stream",
     );
     expect(FakeEventSource.instances[0]?.listeners.has("carrier-count")).toBe(true);
+    expect(FakeEventSource.instances[0]?.listeners.has("congestion-delivery")).toBe(true);
+  });
+
+  it("forwards valid congestion deliveries with the server calculated timestamp", () => {
+    const onCongestionDelivery = vi.fn<(snapshot: CongestionDeliverySnapshot) => void>();
+    createCarrierCountStream({
+      baseUrl: "http://localhost:8080",
+      EventSourceCtor: FakeEventSource as unknown as typeof EventSource,
+      onSnapshot: vi.fn(),
+      onCongestionDelivery,
+    });
+
+    FakeEventSource.instances[0].emitCongestionDelivery({
+      messageId: "congestion-1",
+      calculatedAt: "2026-08-13T05:29:55Z",
+      score: 0.5,
+      level: "MEDIUM",
+      deliveryStatus: "RECOVERED_LATE",
+      retryCount: 2,
+    });
+
+    expect(onCongestionDelivery).toHaveBeenCalledExactlyOnceWith({
+      messageId: "congestion-1",
+      calculatedAt: new Date("2026-08-13T05:29:55Z"),
+      score: 0.5,
+      level: "MEDIUM",
+      deliveryStatus: "RECOVERED_LATE",
+      retryCount: 2,
+    });
   });
 
   it("stores only valid carrier-count events as snapshots", () => {

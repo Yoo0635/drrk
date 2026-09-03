@@ -35,6 +35,14 @@ class FakeEventSource {
     this.listeners.get("carrier-count")?.forEach((listener) => listener(event));
   }
 
+  emitCongestionDelivery(data: unknown, lastEventId = "congestion-1") {
+    const event = new MessageEvent("congestion-delivery", {
+      data: typeof data === "string" ? data : JSON.stringify(data),
+      lastEventId,
+    });
+    this.listeners.get("congestion-delivery")?.forEach((listener) => listener(event));
+  }
+
   close() {
     this.closed = true;
   }
@@ -73,6 +81,14 @@ describe("useCarrierCountSamples", () => {
         score: 0.5,
         level: "MEDIUM",
       });
+      FakeEventSource.instances[0].emitCongestionDelivery({
+        messageId: "congestion-1",
+        calculatedAt: "2026-08-13T05:29:55Z",
+        score: 0.5,
+        level: "MEDIUM",
+        deliveryStatus: "RECOVERED_LATE",
+        retryCount: 2,
+      });
       FakeEventSource.instances[0].emitCarrierCount({
         n_carriers: 0,
         score: null,
@@ -88,9 +104,12 @@ describe("useCarrierCountSamples", () => {
       ]);
       expect(result.current.scoreSamples).toEqual([
         {
+          messageId: "congestion-1",
           score: 0.5,
           level: "MEDIUM",
-          timestamp: Date.parse("2026-08-13T05:30:00.000Z"),
+          timestamp: Date.parse("2026-08-13T05:29:55.000Z"),
+          deliveryStatus: "RECOVERED_LATE",
+          retryCount: 2,
         },
       ]);
     });
@@ -148,6 +167,14 @@ describe("useCarrierCountSamples", () => {
         score: 0.25,
         level: "LOW",
       });
+      FakeEventSource.instances[0].emitCongestionDelivery({
+        messageId: "congestion-1",
+        calculatedAt: "2026-08-13T05:30:00Z",
+        score: 0.25,
+        level: "LOW",
+        deliveryStatus: "LIVE",
+        retryCount: 0,
+      });
     });
 
     expect(result.current.carrierSamples).toEqual([
@@ -155,9 +182,12 @@ describe("useCarrierCountSamples", () => {
     ]);
     expect(result.current.scoreSamples).toEqual([
       {
+        messageId: "congestion-1",
         score: 0.25,
         level: "LOW",
         timestamp: Date.parse("2026-08-13T05:30:00.000Z"),
+        deliveryStatus: "LIVE",
+        retryCount: 0,
       },
     ]);
 
@@ -184,6 +214,14 @@ describe("useCarrierCountSamples", () => {
         score: 0.25,
         level: "LOW",
       });
+      FakeEventSource.instances[0].emitCongestionDelivery({
+        messageId: "congestion-1",
+        calculatedAt: "2026-08-13T05:30:00Z",
+        score: 0.25,
+        level: "LOW",
+        deliveryStatus: "LIVE",
+        retryCount: 0,
+      });
       FakeEventSource.instances[0].onerror?.();
     });
 
@@ -194,9 +232,12 @@ describe("useCarrierCountSamples", () => {
       ]);
       expect(result.current.scoreSamples).toEqual([
         {
+          messageId: "congestion-1",
           score: 0.25,
           level: "LOW",
           timestamp: Date.parse("2026-08-13T05:30:00.000Z"),
+          deliveryStatus: "LIVE",
+          retryCount: 0,
         },
       ]);
     });
