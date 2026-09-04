@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useCarrierCountSamples } from "./useCarrierCountSamples";
 
 type Listener = (event: MessageEvent) => void;
@@ -61,6 +61,10 @@ describe("useCarrierCountSamples", () => {
     FakeEventSource.instances = [];
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("opens the SSE stream on the current origin by default", () => {
     renderHook(() =>
       useCarrierCountSamples({
@@ -78,7 +82,6 @@ describe("useCarrierCountSamples", () => {
       useCarrierCountSamples({
         baseUrl: "http://localhost:8080",
         EventSourceCtor: FakeEventSource as unknown as typeof EventSource,
-        now: () => new Date("2026-08-13T05:30:00.000Z"),
       }),
     );
 
@@ -88,6 +91,7 @@ describe("useCarrierCountSamples", () => {
         n_carriers: 3,
         score: 0.5,
         level: "MEDIUM",
+        serverNow: "2026-08-13T05:30:00Z",
       });
       FakeEventSource.instances[0].emitCongestionDelivery({
         messageId: "congestion-1",
@@ -102,6 +106,7 @@ describe("useCarrierCountSamples", () => {
         n_carriers: 0,
         score: null,
         level: null,
+        serverNow: "2026-08-13T05:30:01Z",
       });
     });
 
@@ -109,7 +114,7 @@ describe("useCarrierCountSamples", () => {
       expect(result.current.connectionStatus).toBe("open");
       expect(result.current.carrierSamples).toEqual([
         { value: 1, timestamp: Date.parse("2026-08-13T05:30:00.000Z") },
-        { value: 0, timestamp: Date.parse("2026-08-13T05:30:00.000Z") },
+        { value: 0, timestamp: Date.parse("2026-08-13T05:30:01.000Z") },
       ]);
       expect(result.current.scoreSamples).toEqual([
         {
@@ -129,26 +134,23 @@ describe("useCarrierCountSamples", () => {
     expect(FakeEventSource.instances[0].closed).toBe(true);
   });
 
-  it("uses the latest clock without reconnecting the SSE stream", async () => {
-    const firstNow = () => new Date("2026-08-13T05:30:00.000Z");
-    const secondNow = () => new Date("2026-08-13T05:31:00.000Z");
+  it("uses the server clock without reconnecting the SSE stream", async () => {
     const { result, rerender } = renderHook(
-      ({ now }) =>
+      () =>
         useCarrierCountSamples({
           baseUrl: "http://localhost:8080",
           EventSourceCtor: FakeEventSource as unknown as typeof EventSource,
-          now,
         }),
-      { initialProps: { now: firstNow } },
     );
 
-    rerender({ now: secondNow });
+    rerender();
 
     act(() => {
       FakeEventSource.instances[0].emitCarrierCount({
         n_carriers: 1,
         score: null,
         level: null,
+        serverNow: "2026-08-13T05:31:00Z",
       });
     });
 
@@ -160,12 +162,44 @@ describe("useCarrierCountSamples", () => {
     });
   });
 
+  it("advances the display window from server time plus monotonic elapsed time", () => {
+    vi.useFakeTimers();
+    let monotonicNow = 10_000;
+    const { result } = renderHook(() =>
+      useCarrierCountSamples({
+        baseUrl: "http://localhost:8080",
+        EventSourceCtor: FakeEventSource as unknown as typeof EventSource,
+        monotonicNow: () => monotonicNow,
+      }),
+    );
+
+    act(() => {
+      FakeEventSource.instances[0].emitCongestionDelivery({
+        messageId: "congestion-1",
+        calculatedAt: "2026-08-13T05:30:00Z",
+        score: 0.5,
+        level: "MEDIUM",
+        deliveryStatus: "LIVE",
+        retryCount: 0,
+        serverNow: "2026-08-13T05:30:00Z",
+      });
+    });
+
+    expect(result.current.windowNow).toBe(Date.parse("2026-08-13T05:30:00.000Z"));
+
+    monotonicNow = 12_500;
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+
+    expect(result.current.windowNow).toBe(Date.parse("2026-08-13T05:30:02.500Z"));
+  });
+
   it("keeps existing samples during a short quiet period", async () => {
     const { result } = renderHook(() =>
       useCarrierCountSamples({
         baseUrl: "http://localhost:8080",
         EventSourceCtor: FakeEventSource as unknown as typeof EventSource,
-        now: () => new Date("2026-08-13T05:30:00.000Z"),
         staleAfterMs: 5,
       }),
     );
@@ -176,6 +210,7 @@ describe("useCarrierCountSamples", () => {
         n_carriers: 2,
         score: 0.25,
         level: "LOW",
+        serverNow: "2026-08-13T05:30:00Z",
       });
       FakeEventSource.instances[0].emitCongestionDelivery({
         messageId: "congestion-1",
@@ -209,7 +244,6 @@ describe("useCarrierCountSamples", () => {
       useCarrierCountSamples({
         baseUrl: "http://localhost:8080",
         EventSourceCtor: FakeEventSource as unknown as typeof EventSource,
-        now: () => new Date("2026-08-13T05:30:00.000Z"),
       }),
     );
 
@@ -252,7 +286,6 @@ describe("useCarrierCountSamples", () => {
       useCarrierCountSamples({
         baseUrl: "http://localhost:8080",
         EventSourceCtor: FakeEventSource as unknown as typeof EventSource,
-        now: () => new Date("2026-08-13T05:30:00.000Z"),
         staleAfterMs: 1000,
       }),
     );
@@ -263,6 +296,7 @@ describe("useCarrierCountSamples", () => {
         n_carriers: 2,
         score: 0.25,
         level: "LOW",
+        serverNow: "2026-08-13T05:30:00Z",
       });
       FakeEventSource.instances[0].emitCongestionDelivery({
         messageId: "congestion-1",

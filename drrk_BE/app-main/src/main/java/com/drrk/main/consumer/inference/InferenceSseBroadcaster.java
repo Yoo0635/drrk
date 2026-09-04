@@ -146,8 +146,9 @@ public class InferenceSseBroadcaster implements CongestionDeliveryPublisher {
 	}
 
 	private void sendSnapshots(ClientEmitter client, List<LatestInferenceSnapshot> snapshots) {
+		Instant serverNow = now();
 		for (LatestInferenceSnapshot snapshot : snapshots) {
-			if (!client.sendOrBuffer(new PendingEvent(EVENT_NAME, snapshot.messageId(), toJson(snapshot)))) {
+			if (!client.sendOrBuffer(new PendingEvent(EVENT_NAME, snapshot.messageId(), toJson(snapshot, serverNow)))) {
 				removeAndComplete(client);
 				return;
 			}
@@ -202,14 +203,15 @@ public class InferenceSseBroadcaster implements CongestionDeliveryPublisher {
 		return store.findAllFresh(now(), snapshotMaxAge);
 	}
 
-	private String toJson(LatestInferenceSnapshot snapshot) {
-		var latestGuide = airportGuideStore.latestFresh(now(), congestionMaxAge).orElse(null);
+	private String toJson(LatestInferenceSnapshot snapshot, Instant serverNow) {
+		var latestGuide = airportGuideStore.latestFresh(serverNow, congestionMaxAge).orElse(null);
 		try {
 			return objectMapper.writeValueAsString(
 					new CarrierCountStreamResponse(
 							snapshot.carrierCount(),
 							latestGuide == null ? null : latestGuide.score(),
-							latestGuide == null ? null : latestGuide.level()
+							latestGuide == null ? null : latestGuide.level(),
+							serverNow
 					)
 			);
 		} catch (JacksonException exception) {

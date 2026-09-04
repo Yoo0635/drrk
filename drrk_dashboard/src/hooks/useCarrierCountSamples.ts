@@ -15,7 +15,7 @@ import type { CarrierCountConnectionStatus } from "../types/inference";
 interface UseCarrierCountSamplesOptions {
   baseUrl?: string;
   EventSourceCtor?: typeof EventSource;
-  now?: () => Date;
+  monotonicNow?: () => number;
   staleAfterMs?: number;
 }
 
@@ -28,42 +28,49 @@ interface UseCarrierCountSamplesResult {
 
 interface ServerClockAnchor {
   serverNow: number;
-  clientNow: number;
+  monotonicNow: number;
 }
 
 export function useCarrierCountSamples({
   baseUrl = import.meta.env.VITE_API_BASE_URL ?? window.location.origin,
   EventSourceCtor,
-  now,
+  monotonicNow,
 }: UseCarrierCountSamplesOptions = {}): UseCarrierCountSamplesResult {
   const [carrierSamples, setCarrierSamples] = useState<CongestionSample[]>([]);
   const [scoreSamples, setScoreSamples] = useState<ScoreSample[]>([]);
   const [connectionStatus, setConnectionStatus] =
     useState<CarrierCountConnectionStatus>("connecting");
-  const [windowNow, setWindowNow] = useState(() => (now?.() ?? new Date()).getTime());
+  const [windowNow, setWindowNow] = useState(0);
   const apiBaseUrlConfigured = baseUrl.trim().length > 0;
-  const nowRef = useRef(now);
+  const monotonicNowRef = useRef(monotonicNow);
   const serverClockRef = useRef<ServerClockAnchor | null>(null);
 
   useEffect(() => {
-    nowRef.current = now;
-  }, [now]);
+    monotonicNowRef.current = monotonicNow;
+  }, [monotonicNow]);
 
   useEffect(() => {
-    const currentClientNow = () => (nowRef.current?.() ?? new Date()).getTime();
+    const currentMonotonicNow = () => monotonicNowRef.current?.() ?? currentPerformanceNow();
     const effectiveNow = () => {
-      const clientNow = currentClientNow();
       const anchor = serverClockRef.current;
-      return anchor === null ? clientNow : anchor.serverNow + (clientNow - anchor.clientNow);
+      if (anchor === null) {
+        return 0;
+      }
+      return anchor.serverNow + (currentMonotonicNow() - anchor.monotonicNow);
     };
     const syncServerClock = (serverNow: Date) => {
+      const serverNowMs = serverNow.getTime();
       serverClockRef.current = {
-        serverNow: serverNow.getTime(),
-        clientNow: currentClientNow(),
+        serverNow: serverNowMs,
+        monotonicNow: currentMonotonicNow(),
       };
-      setWindowNow(effectiveNow());
+      setWindowNow(serverNowMs);
+      return serverNowMs;
     };
     const pruneToWindow = () => {
+      if (serverClockRef.current === null) {
+        return;
+      }
       const nowMs = effectiveNow();
       setWindowNow(nowMs);
       setCarrierSamples((current) => pruneCarrierSamples(current, nowMs));
@@ -74,30 +81,29 @@ export function useCarrierCountSamples({
     const stream = createCarrierCountStream({
       baseUrl,
       EventSourceCtor,
-      now: () => nowRef.current?.() ?? new Date(),
       onOpen: () => setConnectionStatus("open"),
       onError: () => {
         setConnectionStatus("reconnecting");
       },
       onSnapshot: (snapshot) => {
-        const nowMs = effectiveNow();
+        const nowMs = syncServerClock(snapshot.receivedAt);
         setCarrierSamples((current) =>
           pushCarrierSample(current, carrierSnapshotToSample(snapshot), nowMs),
         );
       },
       onCongestionDelivery: (snapshot) => {
-        syncServerClock(snapshot.serverNow);
+        const nowMs = syncServerClock(snapshot.serverNow);
         setScoreSamples((current) =>
-          upsertWithCurrentWindow(current, congestionDeliveryToScoreSample(snapshot), effectiveNow()),
+          upsertWithCurrentWindow(current, congestionDeliveryToScoreSample(snapshot), nowMs),
         );
       },
       onCongestionHistory: (snapshot) => {
-        syncServerClock(snapshot.serverNow);
+        const nowMs = syncServerClock(snapshot.serverNow);
         setScoreSamples((current) =>
           mergeScoreSamples(
             current,
             snapshot.samples.map(congestionDeliveryToScoreSample),
-            effectiveNow(),
+            nowMs,
           ),
         );
       },
@@ -124,4 +130,11 @@ export function useCarrierCountSamples({
 
 function upsertWithCurrentWindow(samples: ScoreSample[], sample: ScoreSample, now: number) {
   return mergeScoreSamples(samples, [sample], now);
+}
+
+function currentPerformanceNow() {
+  if (typeof performance !== "undefined") {
+    return performance.now();
+  }
+  return Date.now();
 }

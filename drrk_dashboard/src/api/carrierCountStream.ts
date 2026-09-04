@@ -12,7 +12,6 @@ const CARRIER_COUNT_STREAM_PATH = "/api/v1/inference/carriers/stream";
 interface CarrierCountStreamOptions {
   baseUrl: string;
   EventSourceCtor?: typeof EventSource;
-  now?: () => Date;
   onSnapshot: (snapshot: CarrierCountSnapshot) => void;
   onCongestionDelivery?: (snapshot: CongestionDeliverySnapshot) => void;
   onCongestionHistory?: (snapshot: CongestionHistorySnapshot) => void;
@@ -27,7 +26,6 @@ interface CarrierCountStream {
 export function createCarrierCountStream({
   baseUrl,
   EventSourceCtor = EventSource,
-  now = () => new Date(),
   onSnapshot,
   onCongestionDelivery,
   onCongestionHistory,
@@ -53,7 +51,7 @@ export function createCarrierCountStream({
       congestionScore: payload.score,
       congestionLevel: payload.level,
       messageId: event.lastEventId,
-      receivedAt: now(),
+      receivedAt: new Date(payload.serverNow),
     });
   });
   eventSource.addEventListener("congestion-delivery", (event) => {
@@ -157,7 +155,9 @@ function isCarrierCountEvent(value: unknown): value is CarrierCountEvent {
         score >= 0 &&
         score <= 1 &&
         typeof level === "string" &&
-        level.trim().length > 0))
+        level.trim().length > 0)) &&
+    typeof candidate.serverNow === "string" &&
+    Number.isFinite(Date.parse(candidate.serverNow))
   );
 }
 

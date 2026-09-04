@@ -50,8 +50,8 @@ class InferenceSseBroadcasterTest {
 						"[{\"messageId\":\"" + airportGuideStore.latest().orElseThrow().messageId()
 								+ "\",\"calculatedAt\":\"2026-08-13T05:00:13Z\",\"score\":0.375,\"level\":\"LOW\","
 								+ "\"deliveryStatus\":\"LIVE\",\"retryCount\":0}]"),
-				"event:carrier-count\nid:8c530c6c-f819-4ad6-b687-760dc698c617\ndata:{\"n_carriers\":3,\"score\":0.375,\"level\":\"LOW\"}\n\n",
-				"event:carrier-count\nid:9d82ae8a-0a67-4540-b519-528386835f80\ndata:{\"n_carriers\":1,\"score\":0.375,\"level\":\"LOW\"}\n\n"
+				"event:carrier-count\nid:8c530c6c-f819-4ad6-b687-760dc698c617\ndata:{\"n_carriers\":3,\"score\":0.375,\"level\":\"LOW\",\"serverNow\":\"2026-08-13T05:00:14Z\"}\n\n",
+				"event:carrier-count\nid:9d82ae8a-0a67-4540-b519-528386835f80\ndata:{\"n_carriers\":1,\"score\":0.375,\"level\":\"LOW\",\"serverNow\":\"2026-08-13T05:00:14Z\"}\n\n"
 		);
 	}
 
@@ -69,10 +69,10 @@ class InferenceSseBroadcasterTest {
 		broadcaster.broadcastLatestSnapshots();
 
 		assertThat(first.events()).containsExactly(
-				"event:carrier-count\nid:8c530c6c-f819-4ad6-b687-760dc698c617\ndata:{\"n_carriers\":3,\"score\":0.375,\"level\":\"LOW\"}\n\n"
+				"event:carrier-count\nid:8c530c6c-f819-4ad6-b687-760dc698c617\ndata:{\"n_carriers\":3,\"score\":0.375,\"level\":\"LOW\",\"serverNow\":\"2026-08-13T05:00:14Z\"}\n\n"
 		);
 		assertThat(second.events()).containsExactly(
-				"event:carrier-count\nid:8c530c6c-f819-4ad6-b687-760dc698c617\ndata:{\"n_carriers\":3,\"score\":0.375,\"level\":\"LOW\"}\n\n"
+				"event:carrier-count\nid:8c530c6c-f819-4ad6-b687-760dc698c617\ndata:{\"n_carriers\":3,\"score\":0.375,\"level\":\"LOW\",\"serverNow\":\"2026-08-13T05:00:14Z\"}\n\n"
 		);
 	}
 
@@ -103,7 +103,7 @@ class InferenceSseBroadcasterTest {
 
 		assertThat(emitter.events()).containsExactly(
 				historyEvent("2026-08-13T05:00:14Z", "2026-08-13T04:50:14Z", "[]"),
-				"event:carrier-count\nid:8c530c6c-f819-4ad6-b687-760dc698c617\ndata:{\"n_carriers\":3,\"score\":null,\"level\":null}\n\n"
+				"event:carrier-count\nid:8c530c6c-f819-4ad6-b687-760dc698c617\ndata:{\"n_carriers\":3,\"score\":null,\"level\":null,\"serverNow\":\"2026-08-13T05:00:14Z\"}\n\n"
 		);
 	}
 
@@ -162,7 +162,7 @@ class InferenceSseBroadcasterTest {
 		broadcaster.broadcastLatestSnapshots();
 
 		assertThat(healthy.events()).containsExactly(
-				"event:carrier-count\nid:8c530c6c-f819-4ad6-b687-760dc698c617\ndata:{\"n_carriers\":3,\"score\":0.375,\"level\":\"LOW\"}\n\n"
+				"event:carrier-count\nid:8c530c6c-f819-4ad6-b687-760dc698c617\ndata:{\"n_carriers\":3,\"score\":0.375,\"level\":\"LOW\",\"serverNow\":\"2026-08-13T05:00:14Z\"}\n\n"
 		);
 		assertThat(failing.completed()).isTrue();
 	}
@@ -207,7 +207,7 @@ class InferenceSseBroadcasterTest {
 						"[{\"messageId\":\"" + airportGuideStore.latest().orElseThrow().messageId()
 								+ "\",\"calculatedAt\":\"2026-08-13T04:59:52Z\",\"score\":0.375,\"level\":\"LOW\","
 								+ "\"deliveryStatus\":\"LIVE\",\"retryCount\":0}]"),
-				"event:carrier-count\nid:8c530c6c-f819-4ad6-b687-760dc698c617\ndata:{\"n_carriers\":3,\"score\":0.375,\"level\":\"LOW\"}\n\n"
+				"event:carrier-count\nid:8c530c6c-f819-4ad6-b687-760dc698c617\ndata:{\"n_carriers\":3,\"score\":0.375,\"level\":\"LOW\",\"serverNow\":\"2026-08-13T05:00:14Z\"}\n\n"
 		);
 	}
 
@@ -224,7 +224,7 @@ class InferenceSseBroadcasterTest {
 						"[{\"messageId\":\"" + airportGuideStore.latest().orElseThrow().messageId()
 								+ "\",\"calculatedAt\":\"2026-08-13T04:59:40Z\",\"score\":0.375,\"level\":\"LOW\","
 								+ "\"deliveryStatus\":\"LIVE\",\"retryCount\":0}]"),
-				"event:carrier-count\nid:8c530c6c-f819-4ad6-b687-760dc698c617\ndata:{\"n_carriers\":3,\"score\":null,\"level\":null}\n\n"
+				"event:carrier-count\nid:8c530c6c-f819-4ad6-b687-760dc698c617\ndata:{\"n_carriers\":3,\"score\":null,\"level\":null,\"serverNow\":\"2026-08-13T05:00:14Z\"}\n\n"
 		);
 	}
 

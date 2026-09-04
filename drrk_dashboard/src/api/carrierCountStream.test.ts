@@ -161,22 +161,34 @@ describe("createCarrierCountStream", () => {
     createCarrierCountStream({
       baseUrl: "http://localhost:8080",
       EventSourceCtor: FakeEventSource as unknown as typeof EventSource,
-      now: () => new Date("2026-08-13T05:30:00.000Z"),
       onSnapshot,
     });
     const eventSource = FakeEventSource.instances[0];
 
     eventSource.emitCarrierCount(
-      { n_carriers: 3, score: 0.5, level: "MEDIUM" },
+      { n_carriers: 3, score: 0.5, level: "MEDIUM", serverNow: "2026-08-13T05:30:00Z" },
       "message-1",
     );
     eventSource.emitCarrierCount(
-      { n_carriers: 1, score: null, level: null },
+      { n_carriers: 1, score: null, level: null, serverNow: "2026-08-13T05:30:01Z" },
       "message-2",
     );
-    eventSource.emitCarrierCount({ n_carriers: -1, score: 0.2, level: "LOW" }, "bad-count");
-    eventSource.emitCarrierCount({ n_carriers: 2, score: 1.2, level: "HIGH" }, "bad-score");
-    eventSource.emitCarrierCount({ n_carriers: 2, score: 0.2, level: null }, "bad-level");
+    eventSource.emitCarrierCount(
+      { n_carriers: -1, score: 0.2, level: "LOW", serverNow: "2026-08-13T05:30:02Z" },
+      "bad-count",
+    );
+    eventSource.emitCarrierCount(
+      { n_carriers: 2, score: 1.2, level: "HIGH", serverNow: "2026-08-13T05:30:02Z" },
+      "bad-score",
+    );
+    eventSource.emitCarrierCount(
+      { n_carriers: 2, score: 0.2, level: null, serverNow: "2026-08-13T05:30:02Z" },
+      "bad-level",
+    );
+    eventSource.emitCarrierCount(
+      { n_carriers: 2, score: 0.2, level: "LOW" },
+      "bad-server-now",
+    );
     eventSource.emitCarrierCount("not-json", "bad-json");
 
     expect(onSnapshot).toHaveBeenCalledTimes(2);
@@ -192,7 +204,7 @@ describe("createCarrierCountStream", () => {
       congestionScore: null,
       congestionLevel: null,
       messageId: "message-2",
-      receivedAt: new Date("2026-08-13T05:30:00.000Z"),
+      receivedAt: new Date("2026-08-13T05:30:01.000Z"),
     });
   });
 

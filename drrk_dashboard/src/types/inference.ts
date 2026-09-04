@@ -2,6 +2,7 @@ export interface CarrierCountEvent {
   n_carriers: number;
   score: number | null;
   level: string | null;
+  serverNow: string;
 }
 
 export interface CarrierCountSnapshot {
