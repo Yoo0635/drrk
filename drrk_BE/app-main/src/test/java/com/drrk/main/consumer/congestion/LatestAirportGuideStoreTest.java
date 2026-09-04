@@ -2,6 +2,7 @@ package com.drrk.main.consumer.congestion;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertIterableEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.drrk.messaging.congestion.CongestionCalculatedMessage;
@@ -13,6 +14,9 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.RedisScript;
+import tools.jackson.databind.ObjectMapper;
 
 class LatestAirportGuideStoreTest {
 
@@ -84,6 +88,22 @@ class LatestAirportGuideStoreTest {
 				.toList());
 	}
 
+	@Test
+	void doesNotUpdateLocalCacheWhenRedisUpdateFails() {
+		Instant now = Instant.parse("2026-08-13T05:11:00Z");
+		LatestAirportGuideStore store = new LatestAirportGuideStore(
+				new FailingRedisTemplate(),
+				new ObjectMapper(),
+				Duration.ofMinutes(10),
+				Clock.fixed(now, ZoneOffset.UTC)
+		);
+
+		assertThrows(IllegalStateException.class, () -> store.handle(calculatedAt(now.minusSeconds(1))));
+
+		assertTrue(store.latest().isEmpty());
+		assertTrue(store.recent().isEmpty());
+	}
+
 	private CongestionCalculatedMessage calculatedAt(Instant calculatedAt) {
 		return CongestionCalculatedMessage.calculated(
 				UUID.randomUUID(),
@@ -119,5 +139,13 @@ class LatestAirportGuideStoreTest {
 				Duration.ofMinutes(10),
 				Clock.fixed(now, ZoneOffset.UTC)
 		);
+	}
+
+	private static final class FailingRedisTemplate extends StringRedisTemplate {
+
+		@Override
+		public <T> T execute(RedisScript<T> script, List<String> keys, Object... args) {
+			throw new IllegalStateException("redis unavailable");
+		}
 	}
 }

@@ -92,11 +92,11 @@ public class LatestAirportGuideStore {
 		}
 
 		CongestionSnapshot snapshot = new CongestionSnapshot(message, deliveryStatus, retryCount, now);
+		updateRedisHistory(snapshot, now);
 		synchronized (cacheLock) {
 			recent.put(message.messageId(), merge(recent.get(message.messageId()), snapshot));
 			pruneLocked(now);
 		}
-		updateRedisHistory(snapshot, now);
 		log.info("[AIRPORT GUIDE UPDATED] calculatedAt={} version={} score={} trainCount={}",
 				message.calculatedAt(),
 				message.calculationVersion(),
