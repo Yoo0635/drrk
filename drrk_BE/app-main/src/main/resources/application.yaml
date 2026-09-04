@@ -46,6 +46,13 @@ congestion:
   consumer:
     auto-startup: ${CONGESTION_CONSUMER_AUTO_STARTUP:true}
     retry-scale-down-delay: ${CONGESTION_CONSUMER_RETRY_SCALE_DOWN_DELAY:PT30S}
+  cache:
+    retention: ${CONGESTION_CACHE_RETENTION:PT10M}
+    cleanup-fixed-rate: ${CONGESTION_CACHE_CLEANUP_FIXED_RATE:PT1S}
+  history:
+    retention: ${CONGESTION_HISTORY_RETENTION:PT720H}
+    cleanup-fixed-rate: ${CONGESTION_HISTORY_CLEANUP_FIXED_RATE:PT1H}
+    cleanup-batch-size: ${CONGESTION_HISTORY_CLEANUP_BATCH_SIZE:1000}
   retry:
     publisher-confirm-timeout: ${CONGESTION_RETRY_PUBLISHER_CONFIRM_TIMEOUT:PT5S}
 
