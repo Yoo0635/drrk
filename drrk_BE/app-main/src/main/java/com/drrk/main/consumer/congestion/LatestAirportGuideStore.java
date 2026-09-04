@@ -8,6 +8,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -47,6 +48,7 @@ public class LatestAirportGuideStore {
 			""";
 
 	private final ConcurrentHashMap<String, CongestionSnapshot> recent = new ConcurrentHashMap<>();
+	private final AtomicReference<CongestionSnapshot> latest = new AtomicReference<>();
 	private final Object cacheLock = new Object();
 	private final StringRedisTemplate redis;
 	private final ObjectMapper objectMapper;
@@ -94,7 +96,9 @@ public class LatestAirportGuideStore {
 		CongestionSnapshot snapshot = new CongestionSnapshot(message, deliveryStatus, retryCount, now);
 		updateRedisHistory(snapshot, now);
 		synchronized (cacheLock) {
-			recent.put(message.messageId(), merge(recent.get(message.messageId()), snapshot));
+			CongestionSnapshot merged = merge(recent.get(message.messageId()), snapshot);
+			recent.put(message.messageId(), merged);
+			updateLatest(merged);
 			pruneLocked(now);
 		}
 		log.info("[AIRPORT GUIDE UPDATED] calculatedAt={} version={} score={} trainCount={}",
@@ -127,13 +131,11 @@ public class LatestAirportGuideStore {
 	}
 
 	public Optional<CongestionCalculatedMessage> latestFresh(Instant now, Duration maxAge) {
-		synchronized (cacheLock) {
-			pruneLocked(now);
-			return recent.values().stream()
-					.map(CongestionSnapshot::message)
-					.filter(message -> isInWindow(message.calculatedAt(), now, maxAge))
-					.max(messageAscending());
+		CongestionSnapshot snapshot = latest.get();
+		if (snapshot == null || !isInWindow(snapshot.message().calculatedAt(), now, maxAge)) {
+			return Optional.empty();
 		}
+		return Optional.of(snapshot.message());
 	}
 
 	@Scheduled(fixedRateString = "${congestion.cache.cleanup-fixed-rate:PT1S}")
@@ -151,6 +153,15 @@ public class LatestAirportGuideStore {
 			return incoming;
 		}
 		return current;
+	}
+
+	private void updateLatest(CongestionSnapshot incoming) {
+		latest.updateAndGet(current -> {
+			if (current == null || snapshotAscending().compare(incoming, current) >= 0) {
+				return incoming;
+			}
+			return current;
+		});
 	}
 
 	private void updateRedisHistory(CongestionSnapshot snapshot, Instant now) {
@@ -176,6 +187,7 @@ public class LatestAirportGuideStore {
 				|| entry.getValue().message().calculatedAt().isAfter(now));
 		int overflow = recent.size() - HISTORY_LIMIT;
 		if (overflow <= 0) {
+			refreshLatestLocked();
 			return;
 		}
 		recent.values().stream()
@@ -184,6 +196,13 @@ public class LatestAirportGuideStore {
 				.map(snapshot -> snapshot.message().messageId())
 				.toList()
 				.forEach(recent::remove);
+		refreshLatestLocked();
+	}
+
+	private void refreshLatestLocked() {
+		latest.set(recent.values().stream()
+				.max(snapshotAscending())
+				.orElse(null));
 	}
 
 	private static boolean isInWindow(Instant timestamp, Instant now, Duration retention) {

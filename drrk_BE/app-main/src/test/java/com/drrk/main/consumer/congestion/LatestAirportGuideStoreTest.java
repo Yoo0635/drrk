@@ -2,7 +2,9 @@ package com.drrk.main.consumer.congestion;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertIterableEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.drrk.messaging.congestion.CongestionCalculatedMessage;
@@ -13,7 +15,13 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.RedisScript;
 import tools.jackson.databind.ObjectMapper;
@@ -86,6 +94,36 @@ class LatestAirportGuideStoreTest {
 		assertEquals(List.of(fresh.messageId()), store.recent().stream()
 				.map(CongestionCalculatedMessage::messageId)
 				.toList());
+	}
+
+	@Test
+	void readsLatestWithoutWaitingForHistoryLock() throws Exception {
+		Instant now = Instant.parse("2026-08-13T05:11:00Z");
+		LatestAirportGuideStore store = storeAt(now);
+		CongestionCalculatedMessage latest = calculatedAt(now.minusSeconds(1));
+		store.handle(latest);
+		Object cacheLock = ReflectionTestUtils.getField(store, "cacheLock");
+		assertNotNull(cacheLock);
+		CountDownLatch lockHeld = new CountDownLatch(1);
+		CountDownLatch releaseLock = new CountDownLatch(1);
+		ExecutorService executor = Executors.newSingleThreadExecutor();
+		Future<?> holder = executor.submit(() -> {
+			synchronized (cacheLock) {
+				lockHeld.countDown();
+				assertTrue(releaseLock.await(1, TimeUnit.SECONDS));
+			}
+			return null;
+		});
+		assertTrue(lockHeld.await(1, TimeUnit.SECONDS));
+
+		try {
+			assertTimeoutPreemptively(Duration.ofMillis(100), () ->
+					assertEquals(latest.messageId(), store.latest().orElseThrow().messageId()));
+		} finally {
+			releaseLock.countDown();
+			holder.get(1, TimeUnit.SECONDS);
+			executor.shutdownNow();
+		}
 	}
 
 	@Test
