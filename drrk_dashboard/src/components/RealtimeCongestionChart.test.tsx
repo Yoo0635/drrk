@@ -11,6 +11,7 @@ describe("RealtimeCongestionChart", () => {
       <RealtimeCongestionChart
         carrierSamples={[]}
         connectionStatus="open"
+        windowNow={15_000}
         scoreSamples={[
           sample("live-0", 0, "LIVE"),
           sample("live-5", 5_000, "LIVE"),
@@ -34,16 +35,17 @@ describe("RealtimeCongestionChart", () => {
       <RealtimeCongestionChart
         carrierSamples={[]}
         connectionStatus="open"
+        windowNow={600_000}
         scoreSamples={[
           sample("start", 0, "LIVE"),
-          sample("middle", 5_000, "LIVE"),
-          sample("end", 15_000, "LIVE"),
+          sample("middle", 300_000, "LIVE"),
+          sample("end", 600_000, "LIVE"),
         ]}
       />,
     );
 
     const points = [...container.querySelectorAll('[data-series="score-point"]')];
-    expect(points.map((point) => Number(point.getAttribute("cx")))).toEqual([393, 496, 702]);
+    expect(points.map((point) => Number(point.getAttribute("cx")))).toEqual([393, 547.5, 702]);
   });
 });
 
@@ -57,6 +59,7 @@ function sample(
     score: 0.5,
     level: "MEDIUM",
     timestamp,
+    bucketTimestamp: Math.floor(timestamp / 5000) * 5000,
     deliveryStatus,
     retryCount: deliveryStatus === "LIVE" ? 0 : 1,
   };

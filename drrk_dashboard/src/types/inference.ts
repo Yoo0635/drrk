@@ -21,6 +21,7 @@ export interface CongestionDeliveryEvent {
   level: string;
   deliveryStatus: CongestionDeliveryStatus;
   retryCount: number;
+  serverNow: string;
 }
 
 export interface CongestionDeliverySnapshot {
@@ -30,6 +31,28 @@ export interface CongestionDeliverySnapshot {
   level: string;
   deliveryStatus: CongestionDeliveryStatus;
   retryCount: number;
+  serverNow: Date;
+}
+
+export interface CongestionHistorySampleEvent {
+  messageId: string;
+  calculatedAt: string;
+  score: number;
+  level: string;
+  deliveryStatus: CongestionDeliveryStatus;
+  retryCount: number;
+}
+
+export interface CongestionHistoryEvent {
+  serverNow: string;
+  windowStart: string;
+  samples: CongestionHistorySampleEvent[];
+}
+
+export interface CongestionHistorySnapshot {
+  serverNow: Date;
+  windowStart: Date;
+  samples: CongestionDeliverySnapshot[];
 }
 
 export type CarrierCountConnectionStatus =

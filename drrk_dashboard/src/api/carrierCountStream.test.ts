@@ -40,6 +40,14 @@ class FakeEventSource {
     this.listeners.get("congestion-delivery")?.forEach((listener) => listener(event));
   }
 
+  emitCongestionHistory(data: unknown, lastEventId = "congestion-history") {
+    const event = new MessageEvent("congestion-history", {
+      data: typeof data === "string" ? data : JSON.stringify(data),
+      lastEventId,
+    });
+    this.listeners.get("congestion-history")?.forEach((listener) => listener(event));
+  }
+
   close() {
     this.closed = true;
   }
@@ -93,6 +101,7 @@ describe("createCarrierCountStream", () => {
       level: "MEDIUM",
       deliveryStatus: "RECOVERED_LATE",
       retryCount: 2,
+      serverNow: "2026-08-13T05:30:00Z",
     });
 
     expect(onCongestionDelivery).toHaveBeenCalledExactlyOnceWith({
@@ -102,6 +111,48 @@ describe("createCarrierCountStream", () => {
       level: "MEDIUM",
       deliveryStatus: "RECOVERED_LATE",
       retryCount: 2,
+      serverNow: new Date("2026-08-13T05:30:00Z"),
+    });
+  });
+
+  it("forwards congestion history snapshots from the initial SSE event", () => {
+    const onCongestionHistory = vi.fn();
+    createCarrierCountStream({
+      baseUrl: "http://localhost:8080",
+      EventSourceCtor: FakeEventSource as unknown as typeof EventSource,
+      onSnapshot: vi.fn(),
+      onCongestionHistory,
+    });
+
+    FakeEventSource.instances[0].emitCongestionHistory({
+      serverNow: "2026-08-13T05:30:00Z",
+      windowStart: "2026-08-13T05:20:00Z",
+      samples: [
+        {
+          messageId: "congestion-1",
+          calculatedAt: "2026-08-13T05:29:55Z",
+          score: 0.5,
+          level: "MEDIUM",
+          deliveryStatus: "LIVE",
+          retryCount: 0,
+        },
+      ],
+    });
+
+    expect(onCongestionHistory).toHaveBeenCalledExactlyOnceWith({
+      serverNow: new Date("2026-08-13T05:30:00Z"),
+      windowStart: new Date("2026-08-13T05:20:00Z"),
+      samples: [
+        {
+          messageId: "congestion-1",
+          calculatedAt: new Date("2026-08-13T05:29:55Z"),
+          score: 0.5,
+          level: "MEDIUM",
+          deliveryStatus: "LIVE",
+          retryCount: 0,
+          serverNow: new Date("2026-08-13T05:30:00Z"),
+        },
+      ],
     });
   });
 

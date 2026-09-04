@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import {
-  CARRIER_SAMPLE_COUNT,
+  SAMPLE_WINDOW_MS,
   type CongestionSample,
   type ScoreSample,
 } from "../carrierSamples";
@@ -18,6 +18,7 @@ interface RealtimeCongestionChartProps {
   carrierSamples: CongestionSample[];
   scoreSamples: ScoreSample[];
   connectionStatus: CarrierCountConnectionStatus;
+  windowNow: number;
 }
 
 function timeLabel(timestamp: number) {
@@ -78,7 +79,7 @@ function severityOf(level: string) {
 /**
  * 라벨을 그릴 인덱스를 고른다.
  *
- * <p>30개를 모두 그리면 글씨가 겹치므로 레벨이 바뀌는 지점과 현재값만 후보로 두고,
+ * <p>120개를 모두 그리면 글씨가 겹치므로 레벨이 바뀌는 지점과 현재값만 후보로 두고,
  * 후보끼리 {@link LABEL_MIN_GAP}보다 가까우면 <b>더 심각한 레벨</b>을 남긴다.
  * 되돌아온 "원활"보다 잠깐 치솟은 "혼잡"이 운영자에게 중요한 정보이기 때문이다.
  * 현재값은 언제나 남긴다.</p>
@@ -122,6 +123,7 @@ export function RealtimeCongestionChart({
   carrierSamples,
   scoreSamples,
   connectionStatus,
+  windowNow,
 }: RealtimeCongestionChartProps) {
   const currentCarrier = carrierSamples.at(-1);
   const currentScore = scoreSamples.at(-1);
@@ -136,23 +138,16 @@ export function RealtimeCongestionChart({
     const rightStart = PAD.l + halfWidth + GAP;
     const leftEnd = leftStart + halfWidth;
     const rightEnd = rightStart + halfWidth;
+    const windowStart = windowNow - SAMPLE_WINDOW_MS;
 
-    const xAt = (index: number, start: number) =>
-      start + (halfWidth * index) / (CARRIER_SAMPLE_COUNT - 1);
-    const firstScoreTimestamp = scoreSamples.at(0)?.timestamp ?? 0;
-    const lastScoreTimestamp = scoreSamples.at(-1)?.timestamp ?? firstScoreTimestamp;
-    const scoreTimeSpan = lastScoreTimestamp - firstScoreTimestamp;
-    const scoreXAt = (timestamp: number) => {
-      if (scoreSamples.length <= 1 || scoreTimeSpan <= 0) {
-        return rightEnd;
-      }
-      return rightStart + (halfWidth * (timestamp - firstScoreTimestamp)) / scoreTimeSpan;
-    };
+    const timeXAt = (timestamp: number, start: number) =>
+      start + (halfWidth * Math.min(1, Math.max(0, (timestamp - windowStart) / SAMPLE_WINDOW_MS)));
+    const scoreXAt = (timestamp: number) => timeXAt(timestamp, rightStart);
     const carrierY = (value: 0 | 1) => PAD.t + (1 - value) * innerHeight;
     const scoreY = (score: number) => PAD.t + (1 - score) * innerHeight;
 
     const carrierPoints = carrierSamples
-      .map((sample, index) => `${xAt(index, leftStart)},${carrierY(sample.value)}`)
+      .map((sample) => `${timeXAt(sample.timestamp, leftStart)},${carrierY(sample.value)}`)
       .join(" ");
     const scoreSegments = scoreSamples.slice(1).map((sample, index) => {
       const previous = scoreSamples[index];
@@ -180,19 +175,19 @@ export function RealtimeCongestionChart({
       scoreSegments,
       carrierArea:
         carrierPoints.length > 0
-          ? `${leftStart},${PAD.t + innerHeight} ${carrierPoints} ${leftEnd},${PAD.t + innerHeight}`
+          ? `${timeXAt(carrierSamples[0].timestamp, leftStart)},${PAD.t + innerHeight} ${carrierPoints} ${timeXAt(carrierSamples.at(-1)?.timestamp ?? windowNow, leftStart)},${PAD.t + innerHeight}`
           : "",
-      xAt,
+      timeXAt,
       scoreXAt,
       /**
-       * 라벨을 그릴 인덱스. 30개를 모두 그리면 글씨가 겹치므로
+       * 라벨을 그릴 인덱스. 120개를 모두 그리면 글씨가 겹치므로
        * 레벨이 바뀌는 지점과 현재값만 남기고, 그마저도 너무 붙으면 생략한다.
        */
       labeledIndices: pickLabeledIndices(scoreSamples, (index) =>
         scoreXAt(scoreSamples[index].timestamp),
       ),
     };
-  }, [carrierSamples, scoreSamples]);
+  }, [carrierSamples, scoreSamples, windowNow]);
 
   return (
     <div style={{ height: "100%", minHeight: 0, display: "flex", flexDirection: "column" }}>
@@ -200,7 +195,7 @@ export function RealtimeCongestionChart({
         <div>
           <div style={{ color: C.txt, fontWeight: 800, fontSize: 15 }}>실시간 혼잡도 측정</div>
           <div style={{ color: C.dim, fontSize: 11, marginTop: 2 }}>
-            최근 30개 수신값 · 좌측 0/1 감지, 우측 score/level 추이
+            최근 10분 · 최대 120개 수신값 · 좌측 0/1 감지, 우측 score/level 추이
           </div>
         </div>
         <div style={{ textAlign: "right" }}>
@@ -324,7 +319,7 @@ export function RealtimeCongestionChart({
         {carrierSamples.map((sample, index) => (
           <circle
             key={`carrier-${sample.timestamp}-${index}`}
-            cx={graph.xAt(index, graph.leftStart)}
+            cx={graph.timeXAt(sample.timestamp, graph.leftStart)}
             cy={graph.carrierY(sample.value)}
             r={index === carrierSamples.length - 1 ? 5 : 2.5}
             fill={sample.value === 1 ? C.red : C.green}
@@ -339,7 +334,7 @@ export function RealtimeCongestionChart({
           const color = levelColor(sample.level);
           const isLast = index === scoreSamples.length - 1;
           const showLabel = graph.labeledIndices.includes(index);
-          // 아래쪽 점은 라벨을 위로 올려 x축 눈금(30회 전 / 현재)과 겹치지 않게 한다.
+          // 아래쪽 점은 라벨을 위로 올려 x축 눈금(10분 전 / 현재)과 겹치지 않게 한다.
           const nearBottom = y > PAD.t + graph.innerHeight - 30;
           const labelY = nearBottom ? y - 11 : y + 16;
           // 양끝 라벨이 차트 밖으로 잘리지 않도록 기준점을 안쪽으로 붙인다.
@@ -385,13 +380,13 @@ export function RealtimeCongestionChart({
         })}
 
         <text x={graph.leftStart} y={H - 9} fontSize={11} fill={C.dim}>
-          30회 전
+          10분 전
         </text>
         <text x={graph.leftEnd} y={H - 9} textAnchor="end" fontSize={11} fill={C.dim}>
           현재
         </text>
         <text x={graph.rightStart} y={H - 9} fontSize={11} fill={C.dim}>
-          30회 전
+          10분 전
         </text>
         <text x={graph.rightEnd} y={H - 9} textAnchor="end" fontSize={11} fill={C.dim}>
           현재

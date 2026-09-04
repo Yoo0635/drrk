@@ -3,6 +3,8 @@ import type {
   CarrierCountSnapshot,
   CongestionDeliveryEvent,
   CongestionDeliverySnapshot,
+  CongestionHistoryEvent,
+  CongestionHistorySnapshot,
 } from "../types/inference";
 
 const CARRIER_COUNT_STREAM_PATH = "/api/v1/inference/carriers/stream";
@@ -13,6 +15,7 @@ interface CarrierCountStreamOptions {
   now?: () => Date;
   onSnapshot: (snapshot: CarrierCountSnapshot) => void;
   onCongestionDelivery?: (snapshot: CongestionDeliverySnapshot) => void;
+  onCongestionHistory?: (snapshot: CongestionHistorySnapshot) => void;
   onOpen?: () => void;
   onError?: () => void;
 }
@@ -27,6 +30,7 @@ export function createCarrierCountStream({
   now = () => new Date(),
   onSnapshot,
   onCongestionDelivery,
+  onCongestionHistory,
   onOpen,
   onError,
 }: CarrierCountStreamOptions): CarrierCountStream | null {
@@ -65,6 +69,28 @@ export function createCarrierCountStream({
       level: payload.level,
       deliveryStatus: payload.deliveryStatus,
       retryCount: payload.retryCount,
+      serverNow: new Date(payload.serverNow),
+    });
+  });
+  eventSource.addEventListener("congestion-history", (event) => {
+    const payload = parseCongestionHistoryEvent(event.data);
+    if (payload === null) {
+      return;
+    }
+
+    const serverNow = new Date(payload.serverNow);
+    onCongestionHistory?.({
+      serverNow,
+      windowStart: new Date(payload.windowStart),
+      samples: payload.samples.map((sample) => ({
+        messageId: sample.messageId,
+        calculatedAt: new Date(sample.calculatedAt),
+        score: sample.score,
+        level: sample.level,
+        deliveryStatus: sample.deliveryStatus,
+        retryCount: sample.retryCount,
+        serverNow,
+      })),
     });
   });
 
@@ -77,6 +103,15 @@ function parseCongestionDeliveryEvent(data: string): CongestionDeliveryEvent | n
   try {
     const value: unknown = JSON.parse(data);
     return isCongestionDeliveryEvent(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function parseCongestionHistoryEvent(data: string): CongestionHistoryEvent | null {
+  try {
+    const value: unknown = JSON.parse(data);
+    return isCongestionHistoryEvent(value) ? value : null;
   } catch {
     return null;
   }
@@ -127,6 +162,49 @@ function isCarrierCountEvent(value: unknown): value is CarrierCountEvent {
 }
 
 function isCongestionDeliveryEvent(value: unknown): value is CongestionDeliveryEvent {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  const status = candidate.deliveryStatus;
+  return (
+    typeof candidate.messageId === "string" &&
+    candidate.messageId.trim().length > 0 &&
+    typeof candidate.calculatedAt === "string" &&
+    Number.isFinite(Date.parse(candidate.calculatedAt)) &&
+    typeof candidate.score === "number" &&
+    Number.isFinite(candidate.score) &&
+    candidate.score >= 0 &&
+    candidate.score <= 1 &&
+    typeof candidate.level === "string" &&
+    candidate.level.trim().length > 0 &&
+    (status === "LIVE" || status === "RECOVERED_LATE") &&
+    typeof candidate.retryCount === "number" &&
+    Number.isInteger(candidate.retryCount) &&
+    candidate.retryCount >= 0 &&
+    typeof candidate.serverNow === "string" &&
+    Number.isFinite(Date.parse(candidate.serverNow))
+  );
+}
+
+function isCongestionHistoryEvent(value: unknown): value is CongestionHistoryEvent {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.serverNow === "string" &&
+    Number.isFinite(Date.parse(candidate.serverNow)) &&
+    typeof candidate.windowStart === "string" &&
+    Number.isFinite(Date.parse(candidate.windowStart)) &&
+    Array.isArray(candidate.samples) &&
+    candidate.samples.every(isCongestionHistorySampleEvent)
+  );
+}
+
+function isCongestionHistorySampleEvent(value: unknown): value is CongestionHistoryEvent["samples"][number] {
   if (typeof value !== "object" || value === null) {
     return false;
   }

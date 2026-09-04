@@ -3,9 +3,11 @@ import { createCarrierCountStream } from "../api/carrierCountStream";
 import {
   carrierSnapshotToSample,
   congestionDeliveryToScoreSample,
+  mergeScoreSamples,
+  pruneCarrierSamples,
+  pruneScoreSamples,
   pushCarrierSample,
   type CongestionSample,
-  upsertScoreSample,
   type ScoreSample,
 } from "../carrierSamples";
 import type { CarrierCountConnectionStatus } from "../types/inference";
@@ -21,40 +23,54 @@ interface UseCarrierCountSamplesResult {
   carrierSamples: CongestionSample[];
   scoreSamples: ScoreSample[];
   connectionStatus: CarrierCountConnectionStatus;
+  windowNow: number;
+}
+
+interface ServerClockAnchor {
+  serverNow: number;
+  clientNow: number;
 }
 
 export function useCarrierCountSamples({
   baseUrl = import.meta.env.VITE_API_BASE_URL ?? window.location.origin,
   EventSourceCtor,
   now,
-  staleAfterMs = 6000,
 }: UseCarrierCountSamplesOptions = {}): UseCarrierCountSamplesResult {
   const [carrierSamples, setCarrierSamples] = useState<CongestionSample[]>([]);
   const [scoreSamples, setScoreSamples] = useState<ScoreSample[]>([]);
   const [connectionStatus, setConnectionStatus] =
     useState<CarrierCountConnectionStatus>("connecting");
+  const [windowNow, setWindowNow] = useState(() => (now?.() ?? new Date()).getTime());
   const apiBaseUrlConfigured = baseUrl.trim().length > 0;
   const nowRef = useRef(now);
+  const serverClockRef = useRef<ServerClockAnchor | null>(null);
 
   useEffect(() => {
     nowRef.current = now;
   }, [now]);
 
   useEffect(() => {
-    let staleTimeout: ReturnType<typeof setTimeout> | null = null;
-    const clearSamples = () => {
-      setCarrierSamples([]);
-      setScoreSamples([]);
+    const currentClientNow = () => (nowRef.current?.() ?? new Date()).getTime();
+    const effectiveNow = () => {
+      const clientNow = currentClientNow();
+      const anchor = serverClockRef.current;
+      return anchor === null ? clientNow : anchor.serverNow + (clientNow - anchor.clientNow);
     };
-    const resetStaleTimeout = () => {
-      if (staleTimeout !== null) {
-        clearTimeout(staleTimeout);
-      }
-      staleTimeout = setTimeout(() => {
-        clearSamples();
-      }, staleAfterMs);
+    const syncServerClock = (serverNow: Date) => {
+      serverClockRef.current = {
+        serverNow: serverNow.getTime(),
+        clientNow: currentClientNow(),
+      };
+      setWindowNow(effectiveNow());
+    };
+    const pruneToWindow = () => {
+      const nowMs = effectiveNow();
+      setWindowNow(nowMs);
+      setCarrierSamples((current) => pruneCarrierSamples(current, nowMs));
+      setScoreSamples((current) => pruneScoreSamples(current, nowMs));
     };
 
+    const pruneInterval = setInterval(pruneToWindow, 1000);
     const stream = createCarrierCountStream({
       baseUrl,
       EventSourceCtor,
@@ -64,37 +80,48 @@ export function useCarrierCountSamples({
         setConnectionStatus("reconnecting");
       },
       onSnapshot: (snapshot) => {
-        resetStaleTimeout();
+        const nowMs = effectiveNow();
         setCarrierSamples((current) =>
-          pushCarrierSample(current, carrierSnapshotToSample(snapshot)),
+          pushCarrierSample(current, carrierSnapshotToSample(snapshot), nowMs),
         );
       },
       onCongestionDelivery: (snapshot) => {
-        resetStaleTimeout();
+        syncServerClock(snapshot.serverNow);
         setScoreSamples((current) =>
-          upsertScoreSample(current, congestionDeliveryToScoreSample(snapshot)),
+          upsertWithCurrentWindow(current, congestionDeliveryToScoreSample(snapshot), effectiveNow()),
+        );
+      },
+      onCongestionHistory: (snapshot) => {
+        syncServerClock(snapshot.serverNow);
+        setScoreSamples((current) =>
+          mergeScoreSamples(
+            current,
+            snapshot.samples.map(congestionDeliveryToScoreSample),
+            effectiveNow(),
+          ),
         );
       },
     });
 
     if (stream === null) {
-      if (staleTimeout !== null) {
-        clearTimeout(staleTimeout);
-      }
+      clearInterval(pruneInterval);
       return undefined;
     }
 
     return () => {
-      if (staleTimeout !== null) {
-        clearTimeout(staleTimeout);
-      }
+      clearInterval(pruneInterval);
       stream.close();
     };
-  }, [baseUrl, EventSourceCtor, staleAfterMs]);
+  }, [baseUrl, EventSourceCtor]);
 
   return {
     carrierSamples,
     scoreSamples,
     connectionStatus: apiBaseUrlConfigured ? connectionStatus : "unavailable",
+    windowNow,
   };
+}
+
+function upsertWithCurrentWindow(samples: ScoreSample[], sample: ScoreSample, now: number) {
+  return mergeScoreSamples(samples, [sample], now);
 }

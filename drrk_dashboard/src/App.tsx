@@ -67,7 +67,7 @@ function ChartRow({ icon, cfg }: { icon: "arr" | "plane"; cfg: ChartCfg }) {
 }
 
 export default function App() {
-  const { carrierSamples, scoreSamples, connectionStatus } = useCarrierCountSamples();
+  const { carrierSamples, scoreSamples, connectionStatus, windowNow } = useCarrierCountSamples();
 
   return (
     <div
@@ -378,6 +378,7 @@ export default function App() {
               carrierSamples={carrierSamples}
               scoreSamples={scoreSamples}
               connectionStatus={connectionStatus}
+              windowNow={windowNow}
             />
             <div
               style={{

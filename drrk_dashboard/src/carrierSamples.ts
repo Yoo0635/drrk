@@ -4,7 +4,8 @@ import type {
   CongestionDeliveryStatus,
 } from "./types/inference";
 
-export const CARRIER_SAMPLE_COUNT = 30;
+export const CARRIER_SAMPLE_COUNT = 120;
+export const SAMPLE_WINDOW_MS = 10 * 60 * 1000;
 const SCORE_BUCKET_MS = 5_000;
 
 export interface CongestionSample {
@@ -17,6 +18,7 @@ export interface ScoreSample {
   score: number;
   level: string;
   timestamp: number;
+  bucketTimestamp: number;
   deliveryStatus: CongestionDeliveryStatus;
   retryCount: number;
 }
@@ -39,11 +41,13 @@ export function congestionDeliveryToScoreSample({
   deliveryStatus,
   retryCount,
 }: CongestionDeliverySnapshot): ScoreSample {
+  const timestamp = calculatedAt.getTime();
   return {
     messageId,
     score,
     level,
-    timestamp: toScoreBucket(calculatedAt.getTime()),
+    timestamp,
+    bucketTimestamp: toScoreBucket(timestamp),
     deliveryStatus,
     retryCount,
   };
@@ -52,33 +56,99 @@ export function congestionDeliveryToScoreSample({
 export function pushCarrierSample(
   samples: CongestionSample[],
   sample: CongestionSample,
+  now = sample.timestamp,
   limit = CARRIER_SAMPLE_COUNT,
 ): CongestionSample[] {
   if (!isValidCongestionSample(sample)) {
-    return samples;
+    return pruneCarrierSamples(samples, now, limit);
   }
 
-  return [...samples, sample].slice(-limit);
+  return pruneCarrierSamples([...samples, sample], now, limit);
+}
+
+export function mergeScoreSamples(
+  samples: ScoreSample[],
+  incoming: ScoreSample[],
+  now: number,
+  limit = CARRIER_SAMPLE_COUNT,
+): ScoreSample[] {
+  return incoming.reduce(
+    (current, sample) => upsertScoreSample(current, sample, now, limit),
+    pruneScoreSamples(samples, now, limit),
+  );
 }
 
 export function upsertScoreSample(
   samples: ScoreSample[],
   sample: ScoreSample,
+  now = sample.timestamp,
   limit = CARRIER_SAMPLE_COUNT,
 ): ScoreSample[] {
   if (!isValidScoreSample(sample)) {
-    return samples;
+    return pruneScoreSamples(samples, now, limit);
   }
 
-  const bucketed = { ...sample, timestamp: toScoreBucket(sample.timestamp) };
-  const retained = samples.filter(
-    (current) =>
-      current.messageId !== bucketed.messageId &&
-      current.timestamp !== bucketed.timestamp,
-  );
-  return [...retained, bucketed]
+  const bucketed = { ...sample, bucketTimestamp: toScoreBucket(sample.timestamp) };
+  const byBucket = new Map<number, ScoreSample>();
+  for (const current of samples) {
+    if (current.messageId === bucketed.messageId) {
+      continue;
+    }
+    const normalized = {
+      ...current,
+      bucketTimestamp: toScoreBucket(current.timestamp),
+    };
+    const winner = betterBucketSample(byBucket.get(normalized.bucketTimestamp), normalized);
+    byBucket.set(normalized.bucketTimestamp, winner);
+  }
+  const winner = betterBucketSample(byBucket.get(bucketed.bucketTimestamp), bucketed);
+  byBucket.set(bucketed.bucketTimestamp, winner);
+
+  return pruneScoreSamples([...byBucket.values()], now, limit);
+}
+
+export function pruneCarrierSamples(
+  samples: CongestionSample[],
+  now: number,
+  limit = CARRIER_SAMPLE_COUNT,
+): CongestionSample[] {
+  const windowStart = now - SAMPLE_WINDOW_MS;
+  return samples
+    .filter((sample) => isValidCongestionSample(sample))
+    .filter((sample) => sample.timestamp > windowStart && sample.timestamp <= now)
     .sort((left, right) => left.timestamp - right.timestamp)
     .slice(-limit);
+}
+
+export function pruneScoreSamples(
+  samples: ScoreSample[],
+  now: number,
+  limit = CARRIER_SAMPLE_COUNT,
+): ScoreSample[] {
+  const windowStart = now - SAMPLE_WINDOW_MS;
+  return samples
+    .filter((sample) => isValidScoreSample(sample))
+    .filter((sample) => sample.timestamp > windowStart && sample.timestamp <= now)
+    .sort(compareScoreSamples)
+    .slice(-limit);
+}
+
+function betterBucketSample(current: ScoreSample | undefined, incoming: ScoreSample) {
+  if (current === undefined) {
+    return incoming;
+  }
+  if (incoming.timestamp !== current.timestamp) {
+    return incoming.timestamp > current.timestamp ? incoming : current;
+  }
+  return incoming.messageId > current.messageId ? incoming : current;
+}
+
+function compareScoreSamples(left: ScoreSample, right: ScoreSample) {
+  const byTimestamp = left.timestamp - right.timestamp;
+  if (byTimestamp !== 0) {
+    return byTimestamp;
+  }
+  return left.messageId.localeCompare(right.messageId);
 }
 
 function isValidCongestionSample(sample: CongestionSample) {

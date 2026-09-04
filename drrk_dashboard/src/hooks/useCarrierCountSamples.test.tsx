@@ -43,6 +43,14 @@ class FakeEventSource {
     this.listeners.get("congestion-delivery")?.forEach((listener) => listener(event));
   }
 
+  emitCongestionHistory(data: unknown, lastEventId = "congestion-history") {
+    const event = new MessageEvent("congestion-history", {
+      data: typeof data === "string" ? data : JSON.stringify(data),
+      lastEventId,
+    });
+    this.listeners.get("congestion-history")?.forEach((listener) => listener(event));
+  }
+
   close() {
     this.closed = true;
   }
@@ -88,6 +96,7 @@ describe("useCarrierCountSamples", () => {
         level: "MEDIUM",
         deliveryStatus: "RECOVERED_LATE",
         retryCount: 2,
+        serverNow: "2026-08-13T05:30:00Z",
       });
       FakeEventSource.instances[0].emitCarrierCount({
         n_carriers: 0,
@@ -108,6 +117,7 @@ describe("useCarrierCountSamples", () => {
           score: 0.5,
           level: "MEDIUM",
           timestamp: Date.parse("2026-08-13T05:29:55.000Z"),
+          bucketTimestamp: Date.parse("2026-08-13T05:29:55.000Z"),
           deliveryStatus: "RECOVERED_LATE",
           retryCount: 2,
         },
@@ -150,7 +160,7 @@ describe("useCarrierCountSamples", () => {
     });
   });
 
-  it("clears existing samples when no new carrier events arrive within the stale window", async () => {
+  it("keeps existing samples during a short quiet period", async () => {
     const { result } = renderHook(() =>
       useCarrierCountSamples({
         baseUrl: "http://localhost:8080",
@@ -174,6 +184,7 @@ describe("useCarrierCountSamples", () => {
         level: "LOW",
         deliveryStatus: "LIVE",
         retryCount: 0,
+        serverNow: "2026-08-13T05:30:00Z",
       });
     });
 
@@ -186,14 +197,53 @@ describe("useCarrierCountSamples", () => {
         score: 0.25,
         level: "LOW",
         timestamp: Date.parse("2026-08-13T05:30:00.000Z"),
+        bucketTimestamp: Date.parse("2026-08-13T05:30:00.000Z"),
         deliveryStatus: "LIVE",
         retryCount: 0,
       },
     ]);
+  });
+
+  it("merges initial congestion history without clearing existing valid points", async () => {
+    const { result } = renderHook(() =>
+      useCarrierCountSamples({
+        baseUrl: "http://localhost:8080",
+        EventSourceCtor: FakeEventSource as unknown as typeof EventSource,
+        now: () => new Date("2026-08-13T05:30:00.000Z"),
+      }),
+    );
+
+    act(() => {
+      FakeEventSource.instances[0].emitCongestionDelivery({
+        messageId: "live-point",
+        calculatedAt: "2026-08-13T05:29:55Z",
+        score: 0.5,
+        level: "MEDIUM",
+        deliveryStatus: "LIVE",
+        retryCount: 0,
+        serverNow: "2026-08-13T05:30:00Z",
+      });
+      FakeEventSource.instances[0].emitCongestionHistory({
+        serverNow: "2026-08-13T05:30:01Z",
+        windowStart: "2026-08-13T05:20:01Z",
+        samples: [
+          {
+            messageId: "history-point",
+            calculatedAt: "2026-08-13T05:29:50Z",
+            score: 0.25,
+            level: "LOW",
+            deliveryStatus: "RECOVERED_LATE",
+            retryCount: 1,
+          },
+        ],
+      });
+    });
 
     await waitFor(() => {
-      expect(result.current.carrierSamples).toEqual([]);
-      expect(result.current.scoreSamples).toEqual([]);
+      expect(result.current.scoreSamples.map((sample) => sample.messageId)).toEqual([
+        "history-point",
+        "live-point",
+      ]);
     });
   });
 
@@ -221,6 +271,7 @@ describe("useCarrierCountSamples", () => {
         level: "LOW",
         deliveryStatus: "LIVE",
         retryCount: 0,
+        serverNow: "2026-08-13T05:30:00Z",
       });
       FakeEventSource.instances[0].onerror?.();
     });
@@ -236,6 +287,7 @@ describe("useCarrierCountSamples", () => {
           score: 0.25,
           level: "LOW",
           timestamp: Date.parse("2026-08-13T05:30:00.000Z"),
+          bucketTimestamp: Date.parse("2026-08-13T05:30:00.000Z"),
           deliveryStatus: "LIVE",
           retryCount: 0,
         },
