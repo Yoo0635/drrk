@@ -6,7 +6,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.drrk.messaging.congestion.CongestionCalculatedMessage;
 import com.drrk.messaging.congestion.CongestionInputReferences;
+import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -14,17 +17,12 @@ import org.junit.jupiter.api.Test;
 class LatestAirportGuideStoreTest {
 
 	@Test
-	void keepsOnlyTheNewestFiveCalculatedResultsAndIgnoresPendingMessages() {
-		LatestAirportGuideStore store = new LatestAirportGuideStore();
+	void keepsOnlyTheNewestOneHundredTwentyCalculatedResultsAndIgnoresPendingMessages() {
 		Instant base = Instant.parse("2026-08-13T05:01:00Z");
-		List<CongestionCalculatedMessage> messages = List.of(
-				calculatedAt(base),
-				calculatedAt(base.plusSeconds(1)),
-				calculatedAt(base.plusSeconds(2)),
-				calculatedAt(base.plusSeconds(3)),
-				calculatedAt(base.plusSeconds(4)),
-				calculatedAt(base.plusSeconds(5))
-		);
+		LatestAirportGuideStore store = storeAt(base.plusSeconds(600));
+		List<CongestionCalculatedMessage> messages = java.util.stream.IntStream.rangeClosed(0, 120)
+				.mapToObj(offset -> calculatedAt(base.plusSeconds(offset)))
+				.toList();
 
 		messages.forEach(store::handle);
 		store.handle(calculatedAt(base.minusSeconds(1)));
@@ -35,25 +33,22 @@ class LatestAirportGuideStoreTest {
 		));
 
 		assertTrue(store.latest().isPresent());
-		assertEquals(messages.get(5).messageId(), store.latest().orElseThrow().messageId());
+		assertEquals(messages.get(120).messageId(), store.latest().orElseThrow().messageId());
+		assertEquals(120, store.recent().size());
+		assertTrue(store.recent().stream().noneMatch(message -> message.messageId().equals(messages.get(0).messageId())));
 		assertIterableEquals(
-				List.of(
-						messages.get(5).messageId(),
-						messages.get(4).messageId(),
-						messages.get(3).messageId(),
-						messages.get(2).messageId(),
-						messages.get(1).messageId()
-				),
+				List.of(messages.get(120).messageId(), messages.get(119).messageId(), messages.get(118).messageId()),
 				store.recent().stream()
 						.map(CongestionCalculatedMessage::messageId)
+						.limit(3)
 						.toList()
 		);
 	}
 
 	@Test
 	void ignoresNoServiceMessagesButStoresNoFlightDataResults() {
-		LatestAirportGuideStore store = new LatestAirportGuideStore();
 		Instant base = Instant.parse("2026-08-13T05:01:00Z");
+		LatestAirportGuideStore store = storeAt(base.plusSeconds(1));
 
 		store.handle(CongestionCalculatedMessage.noService(UUID.randomUUID(), base, inputs()));
 		assertTrue(store.latest().isEmpty());
@@ -73,6 +68,20 @@ class LatestAirportGuideStoreTest {
 		store.handle(measuredOnly);
 
 		assertEquals(measuredOnly.messageId(), store.latest().orElseThrow().messageId());
+	}
+
+	@Test
+	void expiresEntriesByCalculatedAtAfterTenMinutes() {
+		Instant now = Instant.parse("2026-08-13T05:11:00Z");
+		LatestAirportGuideStore store = storeAt(now);
+
+		store.handle(calculatedAt(now.minusSeconds(600)));
+		CongestionCalculatedMessage fresh = calculatedAt(now.minusSeconds(599));
+		store.handle(fresh);
+
+		assertEquals(List.of(fresh.messageId()), store.recent().stream()
+				.map(CongestionCalculatedMessage::messageId)
+				.toList());
 	}
 
 	private CongestionCalculatedMessage calculatedAt(Instant calculatedAt) {
@@ -100,6 +109,15 @@ class LatestAirportGuideStoreTest {
 				0,
 				"8c530c6c-f819-4ad6-b687-760dc698c617",
 				Instant.EPOCH
+		);
+	}
+
+	private LatestAirportGuideStore storeAt(Instant now) {
+		return new LatestAirportGuideStore(
+				null,
+				null,
+				Duration.ofMinutes(10),
+				Clock.fixed(now, ZoneOffset.UTC)
 		);
 	}
 }

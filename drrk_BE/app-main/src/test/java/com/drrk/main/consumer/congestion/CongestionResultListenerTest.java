@@ -11,7 +11,10 @@ import static org.mockito.Mockito.verify;
 import com.drrk.messaging.congestion.CongestionCalculatedMessage;
 import com.rabbitmq.client.Channel;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -34,17 +37,34 @@ class CongestionResultListenerTest {
 	private final Channel channel = Mockito.mock(Channel.class);
 	private SimpleMeterRegistry meterRegistry;
 	private CongestionResultListener listener;
+	private final Clock clock = Clock.fixed(Instant.parse("2026-08-13T03:00:00Z"), ZoneOffset.UTC);
 
 	@BeforeEach
 	void setUp() {
 		meterRegistry = new SimpleMeterRegistry();
+		Mockito.when(handler.handle(any(), any(), any(), anyInt()))
+				.thenAnswer(invocation -> {
+					CongestionCalculatedMessage message = invocation.getArgument(0);
+					CongestionDeliveryStatus deliveryStatus = invocation.getArgument(2);
+					int retryCount = invocation.getArgument(3);
+					if (!CongestionCalculatedMessage.hasScore(message.status())) {
+						return Optional.empty();
+					}
+					return Optional.of(new CongestionSnapshot(
+							message,
+							deliveryStatus,
+							retryCount,
+							Instant.parse("2026-08-13T03:00:01Z")
+					));
+				});
 		listener = new CongestionResultListener(
 				new CongestionCalculatedMessageParser(new ObjectMapper()),
 				handler,
 				retryPublisher,
 				deliveryPublisher,
 				new CongestionReliabilityMetrics(meterRegistry),
-				consumerScaler
+				consumerScaler,
+				clock
 		);
 	}
 
@@ -52,7 +72,7 @@ class CongestionResultListenerTest {
 	void handlesAndAcknowledgesValidMessage() throws Exception {
 		listener.consume(message(validJson(), MESSAGE_ID), channel);
 
-		verify(handler).handle(any());
+		verify(handler).handle(any(), any(), any(), anyInt());
 		verify(channel).basicAck(DELIVERY_TAG, false);
 		verify(channel, never()).basicReject(DELIVERY_TAG, false);
 		verify(retryPublisher, never()).publish(any(), anyInt(), any());
@@ -94,7 +114,7 @@ class CongestionResultListenerTest {
 	void rejectsContractErrorWithoutCallingHandler() throws Exception {
 		listener.consume(message(validJson(), "468c59d4-3b22-44e1-91ed-67b6290fa4a9"), channel);
 
-		verify(handler, never()).handle(any());
+		verify(handler, never()).handle(any(), any(), any(), anyInt());
 		verify(channel).basicReject(DELIVERY_TAG, false);
 		verify(channel, never()).basicAck(DELIVERY_TAG, false);
 	}
@@ -103,7 +123,7 @@ class CongestionResultListenerTest {
 	void rejectsJsonNullAsContractError() throws Exception {
 		listener.consume(message("null", MESSAGE_ID), channel);
 
-		verify(handler, never()).handle(any());
+		verify(handler, never()).handle(any(), any(), any(), anyInt());
 		verify(channel).basicReject(DELIVERY_TAG, false);
 		verify(channel, never()).basicAck(DELIVERY_TAG, false);
 	}
@@ -111,11 +131,11 @@ class CongestionResultListenerTest {
 	@Test
 	void publishesFirstRedisFailureToOneSecondRetryQueueThenAcknowledges() throws Exception {
 		RedisConnectionFailureException failure = new RedisConnectionFailureException("temporary");
-		doThrow(failure).when(handler).handle(any());
+		doThrow(failure).when(handler).handle(any(), any(), any(), anyInt());
 
 		listener.consume(message(validJson(), MESSAGE_ID), channel);
 
-		verify(handler).handle(any());
+		verify(handler).handle(any(), any(), any(), anyInt());
 		verify(retryPublisher).publish(any(Message.class), eq(1), eq(failure));
 		verify(channel).basicAck(DELIVERY_TAG, false);
 		verify(channel, never()).basicReject(DELIVERY_TAG, false);
@@ -127,7 +147,7 @@ class CongestionResultListenerTest {
 	@Test
 	void advancesRedisFailureToNextRetryStage() throws Exception {
 		RedisConnectionFailureException failure = new RedisConnectionFailureException("temporary");
-		doThrow(failure).when(handler).handle(any());
+		doThrow(failure).when(handler).handle(any(), any(), any(), anyInt());
 
 		listener.consume(message(validJson(), MESSAGE_ID, 1), channel);
 
@@ -138,7 +158,7 @@ class CongestionResultListenerTest {
 	@Test
 	void publishesRedisTimeoutToRetryQueueThenAcknowledges() throws Exception {
 		QueryTimeoutException failure = new QueryTimeoutException("command timeout");
-		doThrow(failure).when(handler).handle(any());
+		doThrow(failure).when(handler).handle(any(), any(), any(), anyInt());
 
 		listener.consume(message(validJson(), MESSAGE_ID), channel);
 
@@ -149,11 +169,11 @@ class CongestionResultListenerTest {
 
 	@Test
 	void rejectsRedisFailureAfterThirdRetry() throws Exception {
-		doThrow(new RedisConnectionFailureException("temporary")).when(handler).handle(any());
+		doThrow(new RedisConnectionFailureException("temporary")).when(handler).handle(any(), any(), any(), anyInt());
 
 		listener.consume(message(validJson(), MESSAGE_ID, 3), channel);
 
-		verify(handler).handle(any());
+		verify(handler).handle(any(), any(), any(), anyInt());
 		verify(retryPublisher, never()).publish(any(), anyInt(), any());
 		verify(channel).basicReject(DELIVERY_TAG, false);
 		verify(channel, never()).basicAck(DELIVERY_TAG, false);
@@ -164,7 +184,7 @@ class CongestionResultListenerTest {
 
 	@Test
 	void rejectsPermanentHandlerFailureWithoutRetry() throws Exception {
-		doThrow(new IllegalStateException("permanent")).when(handler).handle(any());
+		doThrow(new IllegalStateException("permanent")).when(handler).handle(any(), any(), any(), anyInt());
 
 		listener.consume(message(validJson(), MESSAGE_ID), channel);
 
@@ -175,7 +195,7 @@ class CongestionResultListenerTest {
 	@Test
 	void requeuesOriginalDeliveryWhenRetryPublishFails() throws Exception {
 		RedisConnectionFailureException redisFailure = new RedisConnectionFailureException("temporary");
-		doThrow(redisFailure).when(handler).handle(any());
+		doThrow(redisFailure).when(handler).handle(any(), any(), any(), anyInt());
 		doThrow(new AmqpException("publish failed"))
 				.when(retryPublisher).publish(any(), eq(1), eq(redisFailure));
 

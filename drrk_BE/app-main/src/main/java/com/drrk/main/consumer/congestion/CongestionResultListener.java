@@ -6,12 +6,15 @@ import com.drrk.messaging.congestion.CongestionCalculatedMessage;
 import com.drrk.messaging.congestion.CongestionRabbitNames;
 import com.rabbitmq.client.Channel;
 import java.io.IOException;
+import java.time.Clock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.dao.QueryTimeoutException;
+import org.springframework.dao.TransientDataAccessException;
 import org.springframework.data.redis.RedisConnectionFailureException;
+import org.springframework.transaction.CannotCreateTransactionException;
 
 public class CongestionResultListener {
 
@@ -24,6 +27,7 @@ public class CongestionResultListener {
 	private final CongestionDeliveryPublisher deliveryPublisher;
 	private final CongestionReliabilityMetrics reliabilityMetrics;
 	private final CongestionConsumerScaler consumerScaler;
+	private final Clock clock;
 
 	public CongestionResultListener(
 			CongestionCalculatedMessageParser parser,
@@ -31,7 +35,8 @@ public class CongestionResultListener {
 			CongestionRetryPublisher retryPublisher,
 			CongestionDeliveryPublisher deliveryPublisher,
 			CongestionReliabilityMetrics reliabilityMetrics,
-			CongestionConsumerScaler consumerScaler
+			CongestionConsumerScaler consumerScaler,
+			Clock clock
 	) {
 		this.parser = parser;
 		this.handler = handler;
@@ -39,6 +44,7 @@ public class CongestionResultListener {
 		this.deliveryPublisher = deliveryPublisher;
 		this.reliabilityMetrics = reliabilityMetrics;
 		this.consumerScaler = consumerScaler;
+		this.clock = clock;
 	}
 
 	@RabbitListener(
@@ -50,10 +56,12 @@ public class CongestionResultListener {
 	public void consume(Message amqpMessage, Channel channel) throws IOException {
 		long deliveryTag = amqpMessage.getMessageProperties().getDeliveryTag();
 		String amqpMessageId = amqpMessage.getMessageProperties().getMessageId();
+		String payload = new String(amqpMessage.getBody(), UTF_8);
 		CongestionCalculatedMessage message;
 		try {
-			message = parser.parse(new String(amqpMessage.getBody(), UTF_8));
+			message = parser.parse(payload);
 			validateMessageId(amqpMessageId, message.messageId());
+			validateCalculatedAt(message);
 		} catch (InvalidCongestionMessageException exception) {
 			reliabilityMetrics.deadLettered("contract_error");
 			log.warn("[CONSUME DLQ] messageId={} reason=CONTRACT_ERROR detail={}",
@@ -61,11 +69,12 @@ public class CongestionResultListener {
 			channel.basicReject(deliveryTag, false);
 			return;
 		}
-		process(message, amqpMessage, deliveryTag, channel);
+		process(message, payload, amqpMessage, deliveryTag, channel);
 	}
 
 	private void process(
 			CongestionCalculatedMessage message,
+			String payload,
 			Message amqpMessage,
 			long deliveryTag,
 			Channel channel
@@ -74,15 +83,26 @@ public class CongestionResultListener {
 		if (completedRetries > 0) {
 			consumerScaler.retryDeliveryObserved();
 		}
+		CongestionDeliveryStatus deliveryStatus = completedRetries == 0
+				? CongestionDeliveryStatus.LIVE
+				: CongestionDeliveryStatus.RECOVERED_LATE;
 		try {
-			handler.handle(message);
-			publishDelivery(message, completedRetries);
+			handler.handle(message, payload, deliveryStatus, completedRetries)
+					.ifPresent(snapshot -> publishDelivery(snapshot.message(), snapshot.deliveryStatus(), snapshot.retryCount()));
 			if (completedRetries > 0) {
 				reliabilityMetrics.recovered(completedRetries);
 			}
 			channel.basicAck(deliveryTag, false);
 		} catch (RuntimeException exception) {
-			if (!isTransientRedisFailure(exception)) {
+			if (exception instanceof InvalidCongestionMessageException) {
+				reliabilityMetrics.deadLettered("contract_error");
+				log.warn("[CONSUME DLQ] messageId={} reason=CONTRACT_ERROR detail={}",
+						message.messageId(), exception.getMessage());
+				channel.basicReject(deliveryTag, false);
+				return;
+			}
+
+			if (!isTransientFailure(exception)) {
 				reliabilityMetrics.deadLettered("permanent_failure");
 				log.error("[CONSUME DLQ] messageId={} reason=PERMANENT_PROCESSING_FAILURE failureType={}",
 						message.messageId(), exception.getClass().getName());
@@ -113,13 +133,14 @@ public class CongestionResultListener {
 		}
 	}
 
-	private void publishDelivery(CongestionCalculatedMessage message, int retryCount) {
+	private void publishDelivery(
+			CongestionCalculatedMessage message,
+			CongestionDeliveryStatus status,
+			int retryCount
+	) {
 		if (!CongestionCalculatedMessage.hasScore(message.status())) {
 			return;
 		}
-		CongestionDeliveryStatus status = retryCount == 0
-				? CongestionDeliveryStatus.LIVE
-				: CongestionDeliveryStatus.RECOVERED_LATE;
 		try {
 			deliveryPublisher.publish(message, status, retryCount);
 		} catch (RuntimeException exception) {
@@ -133,10 +154,13 @@ public class CongestionResultListener {
 		return value instanceof Number number ? number.intValue() : 0;
 	}
 
-	private boolean isTransientRedisFailure(Throwable failure) {
+	private boolean isTransientFailure(Throwable failure) {
 		Throwable current = failure;
 		while (current != null) {
-			if (current instanceof RedisConnectionFailureException || current instanceof QueryTimeoutException) {
+			if (current instanceof RedisConnectionFailureException
+					|| current instanceof QueryTimeoutException
+					|| current instanceof TransientDataAccessException
+					|| current instanceof CannotCreateTransactionException) {
 				return true;
 			}
 			current = current.getCause();
@@ -147,6 +171,12 @@ public class CongestionResultListener {
 	private void validateMessageId(String amqpMessageId, String payloadMessageId) {
 		if (amqpMessageId == null || !amqpMessageId.equals(payloadMessageId)) {
 			throw new InvalidCongestionMessageException("AMQP messageId must match JSON messageId");
+		}
+	}
+
+	private void validateCalculatedAt(CongestionCalculatedMessage message) {
+		if (message.calculatedAt().isAfter(clock.instant())) {
+			throw new InvalidCongestionMessageException("calculatedAt must not be in the future");
 		}
 	}
 }

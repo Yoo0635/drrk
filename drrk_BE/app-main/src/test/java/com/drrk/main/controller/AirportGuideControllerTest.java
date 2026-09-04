@@ -11,7 +11,10 @@ import com.drrk.messaging.congestion.CongestionCalculatedMessage;
 import com.drrk.messaging.congestion.CongestionInputReferences;
 import com.drrk.messaging.congestion.RailroadArrivalResult;
 import com.drrk.messaging.congestion.RailroadArrivalStatus;
+import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,7 +29,12 @@ class AirportGuideControllerTest {
 
 	@BeforeEach
 	void setUp() {
-		store = new LatestAirportGuideStore();
+		store = new LatestAirportGuideStore(
+				null,
+				null,
+				Duration.ofMinutes(10),
+				Clock.fixed(Instant.parse("2026-08-13T06:00:01Z"), ZoneOffset.UTC)
+		);
 		mockMvc = MockMvcBuilders.standaloneSetup(
 				new AirportGuideController(new AirportGuideService(store))
 		).build();

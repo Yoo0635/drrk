@@ -1,169 +1,218 @@
 package com.drrk.main.consumer.congestion;
 
 import com.drrk.messaging.congestion.CongestionCalculatedMessage;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
+import org.springframework.scheduling.annotation.Scheduled;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 
-public class LatestAirportGuideStore implements CongestionResultHandler {
+public class LatestAirportGuideStore {
 
 	private static final Logger log = LoggerFactory.getLogger(LatestAirportGuideStore.class);
-	private static final int HISTORY_LIMIT = 5;
-	private static final String HISTORY_KEY = "drrk:main:sse:airport-guide:latest-history";
-	private static final String LEGACY_PAYLOAD_KEY = "drrk:main:sse:airport-guide:latest";
+	static final int HISTORY_LIMIT = 120;
+	private static final String HISTORY_KEY = "drrk:main:sse:airport-guide:v2:history";
+	private static final String PAYLOAD_KEY = "drrk:main:sse:airport-guide:v2:payloads";
 	private static final String UPDATE_HISTORY_SCRIPT = """
 			redis.call('zadd', KEYS[1], tonumber(ARGV[1]), ARGV[2])
+			redis.call('hset', KEYS[2], ARGV[2], ARGV[3])
+
+			local expired = redis.call('zrangebyscore', KEYS[1], '-inf', tonumber(ARGV[4]))
+			if #expired > 0 then
+			  redis.call('zrem', KEYS[1], unpack(expired))
+			  redis.call('hdel', KEYS[2], unpack(expired))
+			end
+
 			local total = redis.call('zcard', KEYS[1])
-			if total > tonumber(ARGV[4]) then
-			  redis.call('zremrangebyrank', KEYS[1], 0, total - tonumber(ARGV[4]) - 1)
+			if total > tonumber(ARGV[6]) then
+			  local overflow = redis.call('zrange', KEYS[1], 0, total - tonumber(ARGV[6]) - 1)
+			  if #overflow > 0 then
+			    redis.call('zrem', KEYS[1], unpack(overflow))
+			    redis.call('hdel', KEYS[2], unpack(overflow))
+			  end
 			end
-			redis.call('expire', KEYS[1], tonumber(ARGV[3]))
-			local rank = redis.call('zrevrank', KEYS[1], ARGV[2])
-			if rank and rank < tonumber(ARGV[4]) then
-			  return 1
-			end
-			return 0
+
+			redis.call('expire', KEYS[1], tonumber(ARGV[5]))
+			redis.call('expire', KEYS[2], tonumber(ARGV[5]))
+			return 1
 			""";
 
-	private final AtomicReference<List<CongestionCalculatedMessage>> recent = new AtomicReference<>(List.of());
+	private final ConcurrentHashMap<String, CongestionSnapshot> recent = new ConcurrentHashMap<>();
+	private final Object cacheLock = new Object();
 	private final StringRedisTemplate redis;
 	private final ObjectMapper objectMapper;
-	private final Duration redisRetention;
+	private final Duration retention;
+	private final Clock clock;
 
 	public LatestAirportGuideStore() {
-		this.redis = null;
-		this.objectMapper = null;
-		this.redisRetention = Duration.ZERO;
+		this(null, null, Duration.ofMinutes(10), Clock.systemUTC());
 	}
 
 	public LatestAirportGuideStore(
 			StringRedisTemplate redis,
 			ObjectMapper objectMapper,
-			Duration redisRetention
+			Duration retention,
+			Clock clock
 	) {
 		this.redis = redis;
 		this.objectMapper = objectMapper;
-		this.redisRetention = redisRetention;
+		this.retention = retention;
+		this.clock = clock;
 	}
 
-	@Override
-	public void handle(CongestionCalculatedMessage message) {
-		if (CongestionCalculatedMessage.hasScore(message.status())) {
-			if (redis != null) {
-				updateRedisHistory(message);
-				return;
-			}
-			List<CongestionCalculatedMessage> stored = recent.updateAndGet(current -> withLatestFive(current, message));
-			if (stored.contains(message)) {
-				log.info("[AIRPORT GUIDE UPDATED] calculatedAt={} version={} score={} trainCount={}",
-						message.calculatedAt(),
-						message.calculationVersion(),
-						message.score(),
-						message.railroadArrivals().size());
-			}
-		} else {
+	public Optional<CongestionSnapshot> handle(CongestionCalculatedMessage message) {
+		return handle(message, CongestionDeliveryStatus.LIVE, 0);
+	}
+
+	public Optional<CongestionSnapshot> handle(
+			CongestionCalculatedMessage message,
+			CongestionDeliveryStatus deliveryStatus,
+			int retryCount
+	) {
+		if (!CongestionCalculatedMessage.hasScore(message.status())) {
 			log.info("[AIRPORT GUIDE SKIPPED] status={} calculatedAt={} reason=NO_SCORE_IN_MESSAGE",
 					message.status(), message.calculatedAt());
+			return Optional.empty();
 		}
+
+		Instant now = now();
+		if (!isInWindow(message.calculatedAt(), now, retention)) {
+			log.info("[AIRPORT GUIDE SKIPPED] messageId={} calculatedAt={} reason=OUT_OF_LOCAL_WINDOW",
+					message.messageId(), message.calculatedAt());
+			return Optional.empty();
+		}
+
+		CongestionSnapshot snapshot = new CongestionSnapshot(message, deliveryStatus, retryCount, now);
+		synchronized (cacheLock) {
+			recent.put(message.messageId(), merge(recent.get(message.messageId()), snapshot));
+			pruneLocked(now);
+		}
+		updateRedisHistory(snapshot, now);
+		log.info("[AIRPORT GUIDE UPDATED] calculatedAt={} version={} score={} trainCount={}",
+				message.calculatedAt(),
+				message.calculationVersion(),
+				message.score(),
+				message.railroadArrivals().size());
+		return Optional.of(snapshot);
 	}
 
 	public Optional<CongestionCalculatedMessage> latest() {
-		return recent().stream().findFirst();
+		return latestFresh(now(), retention);
 	}
 
 	List<CongestionCalculatedMessage> recent() {
-		if (redis != null) {
-			return recentFromRedis();
-		}
-		return recent.get();
-	}
-
-	public Optional<CongestionCalculatedMessage> latestFresh(Instant now, Duration maxAge) {
-		return latest()
-				.filter(message -> isFresh(message.calculatedAt(), now, maxAge));
-	}
-
-	private static boolean isFresh(Instant timestamp, Instant now, Duration maxAge) {
-		return !timestamp.isAfter(now) && Duration.between(timestamp, now).compareTo(maxAge) <= 0;
-	}
-
-	private void updateRedisHistory(CongestionCalculatedMessage message) {
-		Long stored = redis.execute(
-				new DefaultRedisScript<>(UPDATE_HISTORY_SCRIPT, Long.class),
-				List.of(HISTORY_KEY),
-				String.valueOf(message.calculatedAt().toEpochMilli()),
-				toJson(message),
-				String.valueOf(Math.max(1L, redisRetention.toSeconds())),
-				String.valueOf(HISTORY_LIMIT)
-		);
-		if (Long.valueOf(1L).equals(stored)) {
-			log.info("[AIRPORT GUIDE UPDATED] calculatedAt={} version={} score={} trainCount={}",
-					message.calculatedAt(),
-					message.calculationVersion(),
-					message.score(),
-					message.railroadArrivals().size());
-		}
-	}
-
-	private List<CongestionCalculatedMessage> recentFromRedis() {
-		Set<String> values = redis.opsForZSet().reverseRange(HISTORY_KEY, 0, HISTORY_LIMIT - 1);
-		if (values != null && !values.isEmpty()) {
-			return values.stream()
-					.map(this::fromJson)
-					.flatMap(Optional::stream)
-					.toList();
-		}
-		return legacyLatestFromRedis()
-				.map(List::of)
-				.orElseGet(List::of);
-	}
-
-	private Optional<CongestionCalculatedMessage> legacyLatestFromRedis() {
-		String value = redis.opsForValue().get(LEGACY_PAYLOAD_KEY);
-		if (value == null) {
-			return Optional.empty();
-		}
-		return fromJson(value);
-	}
-
-	private Optional<CongestionCalculatedMessage> fromJson(String value) {
-		try {
-			return Optional.of(objectMapper.readValue(value, CongestionCalculatedMessage.class));
-		} catch (JacksonException exception) {
-			log.warn("[AIRPORT GUIDE SKIPPED] reason=INVALID_REDIS_PAYLOAD detail={}", exception.getMessage());
-			return Optional.empty();
-		}
-	}
-
-	private List<CongestionCalculatedMessage> withLatestFive(
-			List<CongestionCalculatedMessage> current,
-			CongestionCalculatedMessage message
-	) {
-		List<CongestionCalculatedMessage> next = new ArrayList<>(current.size() + 1);
-		next.add(message);
-		next.addAll(current);
-		return next.stream()
-				.sorted(Comparator.comparing(CongestionCalculatedMessage::calculatedAt).reversed())
-				.limit(HISTORY_LIMIT)
+		return recentSnapshots(now()).stream()
+				.map(CongestionSnapshot::message)
+				.sorted(messageDescending())
 				.toList();
 	}
 
-	private String toJson(CongestionCalculatedMessage message) {
+	public List<CongestionSnapshot> recentSnapshots(Instant now) {
+		synchronized (cacheLock) {
+			pruneLocked(now);
+			return recent.values().stream()
+					.filter(snapshot -> isInWindow(snapshot.message().calculatedAt(), now, retention))
+					.sorted(snapshotAscending())
+					.toList();
+		}
+	}
+
+	public Optional<CongestionCalculatedMessage> latestFresh(Instant now, Duration maxAge) {
+		synchronized (cacheLock) {
+			pruneLocked(now);
+			return recent.values().stream()
+					.map(CongestionSnapshot::message)
+					.filter(message -> isInWindow(message.calculatedAt(), now, maxAge))
+					.max(messageAscending());
+		}
+	}
+
+	@Scheduled(fixedRateString = "${congestion.cache.cleanup-fixed-rate:PT1S}")
+	void cleanupExpired() {
+		synchronized (cacheLock) {
+			pruneLocked(now());
+		}
+	}
+
+	private CongestionSnapshot merge(CongestionSnapshot current, CongestionSnapshot incoming) {
+		if (current == null || current.deliveryStatus() != CongestionDeliveryStatus.RECOVERED_LATE) {
+			return incoming;
+		}
+		if (incoming.deliveryStatus() == CongestionDeliveryStatus.RECOVERED_LATE) {
+			return incoming;
+		}
+		return current;
+	}
+
+	private void updateRedisHistory(CongestionSnapshot snapshot, Instant now) {
+		if (redis == null) {
+			return;
+		}
+		long ttlSeconds = Math.max(1L, retention.toSeconds());
+		redis.execute(
+				new DefaultRedisScript<>(UPDATE_HISTORY_SCRIPT, Long.class),
+				List.of(HISTORY_KEY, PAYLOAD_KEY),
+				String.valueOf(snapshot.message().calculatedAt().toEpochMilli()),
+				snapshot.message().messageId(),
+				toJson(snapshot),
+				String.valueOf(now.minus(retention).toEpochMilli()),
+				String.valueOf(ttlSeconds),
+				String.valueOf(HISTORY_LIMIT)
+		);
+	}
+
+	private void pruneLocked(Instant now) {
+		Instant cutoff = now.minus(retention);
+		recent.entrySet().removeIf(entry -> !entry.getValue().message().calculatedAt().isAfter(cutoff)
+				|| entry.getValue().message().calculatedAt().isAfter(now));
+		int overflow = recent.size() - HISTORY_LIMIT;
+		if (overflow <= 0) {
+			return;
+		}
+		recent.values().stream()
+				.sorted(snapshotAscending())
+				.limit(overflow)
+				.map(snapshot -> snapshot.message().messageId())
+				.toList()
+				.forEach(recent::remove);
+	}
+
+	private static boolean isInWindow(Instant timestamp, Instant now, Duration retention) {
+		return !timestamp.isAfter(now) && timestamp.isAfter(now.minus(retention));
+	}
+
+	private static Comparator<CongestionCalculatedMessage> messageAscending() {
+		return Comparator.comparing(CongestionCalculatedMessage::calculatedAt)
+				.thenComparing(CongestionCalculatedMessage::messageId);
+	}
+
+	private static Comparator<CongestionCalculatedMessage> messageDescending() {
+		return messageAscending().reversed();
+	}
+
+	private static Comparator<CongestionSnapshot> snapshotAscending() {
+		return Comparator.comparing((CongestionSnapshot snapshot) -> snapshot.message().calculatedAt())
+				.thenComparing(snapshot -> snapshot.message().messageId());
+	}
+
+	private String toJson(CongestionSnapshot snapshot) {
 		try {
-			return objectMapper.writeValueAsString(message);
+			return objectMapper.writeValueAsString(snapshot);
 		} catch (JacksonException exception) {
 			throw new IllegalStateException("failed to serialize latest airport guide", exception);
 		}
+	}
+
+	private Instant now() {
+		return clock.instant();
 	}
 }

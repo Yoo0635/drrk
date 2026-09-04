@@ -1,8 +1,11 @@
 package com.drrk.main.consumer.congestion;
 
+import com.drrk.messaging.congestion.CongestionCalculatedMessage;
 import com.drrk.messaging.congestion.CongestionRabbitNames;
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
+import java.util.Optional;
 import org.springframework.amqp.core.AcknowledgeMode;
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
@@ -14,9 +17,13 @@ import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.rabbit.listener.RabbitListenerEndpointRegistry;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.CannotCreateTransactionException;
 import tools.jackson.databind.ObjectMapper;
 
 @Configuration(proxyBeanMethods = false)
@@ -140,22 +147,77 @@ public class CongestionRabbitConfiguration {
 	}
 
 	@Bean
+	@ConditionalOnBean(JdbcTemplate.class)
+	CongestionHistoryStore jdbcCongestionHistoryStore(JdbcTemplate jdbcTemplate) {
+		return new JdbcCongestionHistoryStore(jdbcTemplate);
+	}
+
+	@Bean
+	@ConditionalOnMissingBean(CongestionHistoryStore.class)
+	CongestionHistoryStore unavailableCongestionHistoryStore() {
+		return new CongestionHistoryStore() {
+			@Override
+			public Optional<String> findPayload(String messageId) {
+				throw unavailable();
+			}
+
+			@Override
+			public boolean insertIfAbsent(
+					CongestionCalculatedMessage message,
+					String payload,
+					Instant receivedAt
+			) {
+				throw unavailable();
+			}
+
+			@Override
+			public int deleteExpired(Instant cutoff, int limit) {
+				throw unavailable();
+			}
+
+			private CannotCreateTransactionException unavailable() {
+				return new CannotCreateTransactionException("congestion history database is unavailable");
+			}
+		};
+	}
+
+	@Bean
+	CongestionHistoryIngestionService congestionHistoryIngestionService(
+			CongestionHistoryStore store,
+			Clock clock,
+			@Value("${congestion.history.retention:PT720H}") Duration retention,
+			@Value("${congestion.history.cleanup-batch-size:1000}") int cleanupBatchSize
+	) {
+		return new CongestionHistoryIngestionService(store, clock, retention, cleanupBatchSize);
+	}
+
+	@Bean
 	LatestAirportGuideStore latestAirportGuideStore(
 			StringRedisTemplate redis,
 			ObjectMapper objectMapper,
-			@Value("${inference.stream.redis-retention:PT10M}") Duration redisRetention
+			Clock clock,
+			@Value("${congestion.cache.retention:PT10M}") Duration redisRetention
 	) {
-		return new LatestAirportGuideStore(redis, objectMapper, redisRetention);
+		return new LatestAirportGuideStore(redis, objectMapper, redisRetention, clock);
+	}
+
+	@Bean
+	CongestionResultHandler congestionResultHandler(
+			CongestionHistoryIngestionService historyIngestionService,
+			LatestAirportGuideStore latestAirportGuideStore
+	) {
+		return new PersistentCongestionResultHandler(historyIngestionService, latestAirportGuideStore);
 	}
 
 	@Bean
 	CongestionResultListener congestionResultListener(
 			CongestionCalculatedMessageParser parser,
-			LatestAirportGuideStore handler,
+			CongestionResultHandler handler,
 			CongestionRetryPublisher retryPublisher,
 			CongestionDeliveryPublisher deliveryPublisher,
 			CongestionReliabilityMetrics reliabilityMetrics,
-			CongestionConsumerScaler consumerScaler
+			CongestionConsumerScaler consumerScaler,
+			Clock clock
 	) {
 		return new CongestionResultListener(
 				parser,
@@ -163,7 +225,8 @@ public class CongestionRabbitConfiguration {
 				retryPublisher,
 				deliveryPublisher,
 				reliabilityMetrics,
-				consumerScaler
+				consumerScaler,
+				clock
 		);
 	}
 

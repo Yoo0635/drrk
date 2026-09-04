@@ -3,11 +3,13 @@ package com.drrk.main.consumer.inference;
 import com.drrk.main.consumer.congestion.LatestAirportGuideStore;
 import com.drrk.main.consumer.congestion.CongestionDeliveryPublisher;
 import com.drrk.main.consumer.congestion.CongestionDeliveryStatus;
+import com.drrk.main.consumer.congestion.CongestionSnapshot;
 import com.drrk.messaging.congestion.CongestionCalculatedMessage;
 import java.io.IOException;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -27,7 +29,9 @@ public class InferenceSseBroadcaster implements CongestionDeliveryPublisher {
 	private static final Logger log = LoggerFactory.getLogger(InferenceSseBroadcaster.class);
 	private static final String EVENT_NAME = "carrier-count";
 	private static final String CONGESTION_EVENT_NAME = "congestion-delivery";
+	private static final String CONGESTION_HISTORY_EVENT_NAME = "congestion-history";
 	private static final Duration DRAIN_RETRY = Duration.ofSeconds(1);
+	private static final int INITIAL_BUFFER_LIMIT = 120;
 
 	private final LatestInferenceSnapshotStore store;
 	private final LatestAirportGuideStore airportGuideStore;
@@ -36,7 +40,7 @@ public class InferenceSseBroadcaster implements CongestionDeliveryPublisher {
 	private final Duration snapshotMaxAge;
 	private final Duration congestionMaxAge;
 	private final Duration emitterTimeout;
-	private final Set<SseEmitter> emitters = ConcurrentHashMap.newKeySet();
+	private final Set<ClientEmitter> emitters = ConcurrentHashMap.newKeySet();
 
 	@Autowired
 	public InferenceSseBroadcaster(
@@ -77,31 +81,35 @@ public class InferenceSseBroadcaster implements CongestionDeliveryPublisher {
 	}
 
 	public int drainActiveEmitters() {
-		List<SseEmitter> currentEmitters = List.copyOf(emitters);
-		for (SseEmitter emitter : currentEmitters) {
-			sendDrainAndComplete(emitter);
+		List<ClientEmitter> currentEmitters = List.copyOf(emitters);
+		for (ClientEmitter client : currentEmitters) {
+			sendDrainAndComplete(client);
 		}
 		return currentEmitters.size();
 	}
 
 	SseEmitter subscribe(SseEmitter emitter) {
-		emitters.add(emitter);
-		emitter.onCompletion(() -> emitters.remove(emitter));
-		emitter.onTimeout(() -> removeAndComplete(emitter));
-		emitter.onError(error -> removeAndComplete(emitter));
-		sendCurrentState(emitter);
+		ClientEmitter client = new ClientEmitter(emitter);
+		emitters.add(client);
+		emitter.onCompletion(() -> emitters.remove(client));
+		emitter.onTimeout(() -> removeAndComplete(client));
+		emitter.onError(error -> removeAndComplete(client));
+		sendCurrentState(client);
+		if (!client.finishInitialization()) {
+			removeAndComplete(client);
+		}
 		return emitter;
 	}
 
 	@Scheduled(fixedRateString = "${inference.stream.fixed-rate:PT5S}")
 	public void broadcastLatestSnapshots() {
 		List<LatestInferenceSnapshot> snapshots = currentSnapshots();
-		for (SseEmitter emitter : List.copyOf(emitters)) {
+		for (ClientEmitter client : List.copyOf(emitters)) {
 			if (snapshots.isEmpty()) {
-				sendHeartbeat(emitter);
+				sendHeartbeat(client);
 				continue;
 			}
-			sendSnapshots(emitter, snapshots);
+			sendSnapshots(client, snapshots);
 		}
 	}
 
@@ -111,68 +119,82 @@ public class InferenceSseBroadcaster implements CongestionDeliveryPublisher {
 			CongestionDeliveryStatus deliveryStatus,
 			int retryCount
 	) {
+		Instant now = now();
 		String payload = toJson(new CongestionDeliveryStreamResponse(
 				message.messageId(),
 				message.calculatedAt(),
 				message.score(),
 				message.level(),
 				deliveryStatus,
-				retryCount
+				retryCount,
+				now
 		));
-		for (SseEmitter emitter : List.copyOf(emitters)) {
-			try {
-				emitter.send(SseEmitter.event()
-						.name(CONGESTION_EVENT_NAME)
-						.id(message.messageId())
-						.data(payload));
-			} catch (IOException | IllegalStateException exception) {
-				log.debug("[CONGESTION SSE DISCONNECTED] reason={}", exception.getMessage());
-				removeAndComplete(emitter);
+		for (ClientEmitter client : List.copyOf(emitters)) {
+			if (!client.sendOrBuffer(new PendingEvent(CONGESTION_EVENT_NAME, message.messageId(), payload))) {
+				removeAndComplete(client);
 			}
 		}
 	}
 
-	private void sendCurrentState(SseEmitter emitter) {
+	private void sendCurrentState(ClientEmitter client) {
+		sendCongestionHistory(client);
 		List<LatestInferenceSnapshot> snapshots = currentSnapshots();
 		if (snapshots.isEmpty()) {
 			return;
 		}
-		sendSnapshots(emitter, snapshots);
+		sendSnapshots(client, snapshots);
 	}
 
-	private void sendSnapshots(SseEmitter emitter, List<LatestInferenceSnapshot> snapshots) {
+	private void sendSnapshots(ClientEmitter client, List<LatestInferenceSnapshot> snapshots) {
 		for (LatestInferenceSnapshot snapshot : snapshots) {
-			try {
-				emitter.send(SseEmitter.event()
-						.name(EVENT_NAME)
-						.id(snapshot.messageId())
-						.data(toJson(snapshot)));
-			} catch (IOException | IllegalStateException exception) {
-				log.debug("[INFERENCE SSE DISCONNECTED] reason={}", exception.getMessage());
-				removeAndComplete(emitter);
+			if (!client.sendOrBuffer(new PendingEvent(EVENT_NAME, snapshot.messageId(), toJson(snapshot)))) {
+				removeAndComplete(client);
 				return;
 			}
 		}
 	}
 
-	private void sendHeartbeat(SseEmitter emitter) {
-		try {
-			emitter.send(SseEmitter.event().comment("heartbeat"));
-		} catch (IOException | IllegalStateException exception) {
-			log.debug("[INFERENCE SSE HEARTBEAT FAILED] reason={}", exception.getMessage());
-			removeAndComplete(emitter);
+	private void sendCongestionHistory(ClientEmitter client) {
+		Instant now = now();
+		List<CongestionHistorySampleResponse> samples = airportGuideStore.recentSnapshots(now).stream()
+				.map(this::toHistorySample)
+				.toList();
+		String payload = toJson(new CongestionHistoryStreamResponse(now, now.minus(Duration.ofMinutes(10)), samples));
+		if (!client.sendNow(new PendingEvent(CONGESTION_HISTORY_EVENT_NAME, "congestion-history-" + now.toEpochMilli(), payload))) {
+			removeAndComplete(client);
 		}
 	}
 
-	private void sendDrainAndComplete(SseEmitter emitter) {
+	private CongestionHistorySampleResponse toHistorySample(CongestionSnapshot snapshot) {
+		CongestionCalculatedMessage message = snapshot.message();
+		return new CongestionHistorySampleResponse(
+				message.messageId(),
+				message.calculatedAt(),
+				message.score(),
+				message.level(),
+				snapshot.deliveryStatus(),
+				snapshot.retryCount()
+		);
+	}
+
+	private void sendHeartbeat(ClientEmitter client) {
 		try {
-			emitter.send(SseEmitter.event()
+			client.emitter().send(SseEmitter.event().comment("heartbeat"));
+		} catch (IOException | IllegalStateException exception) {
+			log.debug("[INFERENCE SSE HEARTBEAT FAILED] reason={}", exception.getMessage());
+			removeAndComplete(client);
+		}
+	}
+
+	private void sendDrainAndComplete(ClientEmitter client) {
+		try {
+			client.emitter().send(SseEmitter.event()
 					.reconnectTime(DRAIN_RETRY.toMillis())
 					.comment("drain"));
 		} catch (IOException | IllegalStateException exception) {
 			log.debug("[INFERENCE SSE DRAIN FAILED] reason={}", exception.getMessage());
 		} finally {
-			removeAndComplete(emitter);
+			removeAndComplete(client);
 		}
 	}
 
@@ -203,16 +225,78 @@ public class InferenceSseBroadcaster implements CongestionDeliveryPublisher {
 		}
 	}
 
+	private String toJson(CongestionHistoryStreamResponse response) {
+		try {
+			return objectMapper.writeValueAsString(response);
+		} catch (JacksonException exception) {
+			throw new IllegalStateException("failed to serialize congestion history SSE payload", exception);
+		}
+	}
+
 	private Instant now() {
 		return clock.instant();
 	}
 
-	private void removeAndComplete(SseEmitter emitter) {
-		emitters.remove(emitter);
+	private void removeAndComplete(ClientEmitter client) {
+		emitters.remove(client);
 		try {
-			emitter.complete();
+			client.emitter().complete();
 		} catch (IllegalStateException ignored) {
 			log.debug("[INFERENCE SSE ALREADY COMPLETED]");
+		}
+	}
+
+	private record PendingEvent(String name, String id, String payload) {
+	}
+
+	private static final class ClientEmitter {
+
+		private final SseEmitter emitter;
+		private final List<PendingEvent> buffer = new ArrayList<>();
+		private boolean initializing = true;
+
+		private ClientEmitter(SseEmitter emitter) {
+			this.emitter = emitter;
+		}
+
+		private SseEmitter emitter() {
+			return emitter;
+		}
+
+		private synchronized boolean sendOrBuffer(PendingEvent event) {
+			if (initializing) {
+				if (buffer.size() >= INITIAL_BUFFER_LIMIT) {
+					return false;
+				}
+				buffer.add(event);
+				return true;
+			}
+			return sendNow(event);
+		}
+
+		private synchronized boolean sendNow(PendingEvent event) {
+			try {
+				emitter.send(SseEmitter.event()
+						.name(event.name())
+						.id(event.id())
+						.data(event.payload()));
+				return true;
+			} catch (IOException | IllegalStateException exception) {
+				log.debug("[SSE DISCONNECTED] event={} reason={}", event.name(), exception.getMessage());
+				return false;
+			}
+		}
+
+		private synchronized boolean finishInitialization() {
+			initializing = false;
+			for (PendingEvent event : List.copyOf(buffer)) {
+				if (!sendNow(event)) {
+					buffer.clear();
+					return false;
+				}
+			}
+			buffer.clear();
+			return true;
 		}
 	}
 }
