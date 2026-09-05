@@ -30,6 +30,7 @@ class CongestionResultListenerTest {
 	private final CongestionResultHandler handler = Mockito.mock(CongestionResultHandler.class);
 	private final CongestionRetryPublisher retryPublisher = Mockito.mock(CongestionRetryPublisher.class);
 	private final CongestionDeliveryPublisher deliveryPublisher = Mockito.mock(CongestionDeliveryPublisher.class);
+	private final CongestionConsumerScaler consumerScaler = Mockito.mock(CongestionConsumerScaler.class);
 	private final Channel channel = Mockito.mock(Channel.class);
 	private SimpleMeterRegistry meterRegistry;
 	private CongestionResultListener listener;
@@ -42,7 +43,8 @@ class CongestionResultListenerTest {
 				handler,
 				retryPublisher,
 				deliveryPublisher,
-				new CongestionReliabilityMetrics(meterRegistry)
+				new CongestionReliabilityMetrics(meterRegistry),
+				consumerScaler
 		);
 	}
 
@@ -54,6 +56,7 @@ class CongestionResultListenerTest {
 		verify(channel).basicAck(DELIVERY_TAG, false);
 		verify(channel, never()).basicReject(DELIVERY_TAG, false);
 		verify(retryPublisher, never()).publish(any(), anyInt(), any());
+		verify(consumerScaler, never()).retryDeliveryObserved();
 	}
 
 	@Test
@@ -84,6 +87,7 @@ class CongestionResultListenerTest {
 		org.assertj.core.api.Assertions.assertThat(counter(
 				"drrk.congestion.retry.recovered", "retry_count", "2"
 		)).isEqualTo(1.0);
+		verify(consumerScaler).retryDeliveryObserved();
 	}
 
 	@Test

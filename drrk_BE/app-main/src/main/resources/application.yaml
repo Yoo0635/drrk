@@ -45,6 +45,7 @@ auth:
 congestion:
   consumer:
     auto-startup: ${CONGESTION_CONSUMER_AUTO_STARTUP:true}
+    retry-scale-down-delay: ${CONGESTION_CONSUMER_RETRY_SCALE_DOWN_DELAY:PT30S}
   retry:
     publisher-confirm-timeout: ${CONGESTION_RETRY_PUBLISHER_CONFIRM_TIMEOUT:PT5S}
 

@@ -73,7 +73,7 @@ class CongestionRabbitConfigurationTest {
 	}
 
 	@Test
-	void configuresSingleManualAckConsumerWithoutAutomaticRequeue() {
+	void configuresRetryAwareManualAckConsumersWithoutAutomaticRequeue() {
 		CachingConnectionFactory connectionFactory = new CachingConnectionFactory("localhost");
 		SimpleRabbitListenerContainerFactory factory = configuration.congestionRabbitListenerContainerFactory(
 				connectionFactory
@@ -87,6 +87,7 @@ class CongestionRabbitConfigurationTest {
 
 		assertThat(container.getAcknowledgeMode()).isEqualTo(AcknowledgeMode.MANUAL);
 		assertThat(ReflectionTestUtils.getField(container, "concurrentConsumers")).isEqualTo(1);
+		assertThat(ReflectionTestUtils.getField(container, "maxConcurrentConsumers")).isEqualTo(2);
 		assertThat(ReflectionTestUtils.getField(container, "prefetchCount")).isEqualTo(5);
 		assertThat(ReflectionTestUtils.getField(container, "defaultRequeueRejected")).isEqualTo(false);
 		connectionFactory.destroy();
