@@ -23,22 +23,26 @@ public class CongestionResultListener {
 	private final CongestionRetryPublisher retryPublisher;
 	private final CongestionDeliveryPublisher deliveryPublisher;
 	private final CongestionReliabilityMetrics reliabilityMetrics;
+	private final CongestionConsumerScaler consumerScaler;
 
 	public CongestionResultListener(
 			CongestionCalculatedMessageParser parser,
 			CongestionResultHandler handler,
 			CongestionRetryPublisher retryPublisher,
 			CongestionDeliveryPublisher deliveryPublisher,
-			CongestionReliabilityMetrics reliabilityMetrics
+			CongestionReliabilityMetrics reliabilityMetrics,
+			CongestionConsumerScaler consumerScaler
 	) {
 		this.parser = parser;
 		this.handler = handler;
 		this.retryPublisher = retryPublisher;
 		this.deliveryPublisher = deliveryPublisher;
 		this.reliabilityMetrics = reliabilityMetrics;
+		this.consumerScaler = consumerScaler;
 	}
 
 	@RabbitListener(
+			id = CongestionConsumerScaler.LISTENER_ID,
 			queues = CongestionRabbitNames.MAIN_QUEUE,
 			containerFactory = "congestionRabbitListenerContainerFactory",
 			autoStartup = "${congestion.consumer.auto-startup:true}"
@@ -67,6 +71,9 @@ public class CongestionResultListener {
 			Channel channel
 	) throws IOException {
 		int completedRetries = retryCount(amqpMessage);
+		if (completedRetries > 0) {
+			consumerScaler.retryDeliveryObserved();
+		}
 		try {
 			handler.handle(message);
 			publishDelivery(message, completedRetries);

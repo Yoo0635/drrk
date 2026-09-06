@@ -12,6 +12,7 @@ import org.springframework.amqp.core.QueueBuilder;
 import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.amqp.rabbit.listener.RabbitListenerEndpointRegistry;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -119,10 +120,18 @@ public class CongestionRabbitConfiguration {
 		factory.setConnectionFactory(connectionFactory);
 		factory.setAcknowledgeMode(AcknowledgeMode.MANUAL);
 		factory.setConcurrentConsumers(1);
-		factory.setMaxConcurrentConsumers(1);
+		factory.setMaxConcurrentConsumers(2);
 		factory.setPrefetchCount(5);
 		factory.setDefaultRequeueRejected(false);
 		return factory;
+	}
+
+	@Bean
+	CongestionConsumerScaler congestionConsumerScaler(
+			RabbitListenerEndpointRegistry registry,
+			@Value("${congestion.consumer.retry-scale-down-delay:PT30S}") Duration scaleDownDelay
+	) {
+		return new RabbitCongestionConsumerScaler(registry, scaleDownDelay);
 	}
 
 	@Bean
@@ -145,14 +154,16 @@ public class CongestionRabbitConfiguration {
 			LatestAirportGuideStore handler,
 			CongestionRetryPublisher retryPublisher,
 			CongestionDeliveryPublisher deliveryPublisher,
-			CongestionReliabilityMetrics reliabilityMetrics
+			CongestionReliabilityMetrics reliabilityMetrics,
+			CongestionConsumerScaler consumerScaler
 	) {
 		return new CongestionResultListener(
 				parser,
 				handler,
 				retryPublisher,
 				deliveryPublisher,
-				reliabilityMetrics
+				reliabilityMetrics,
+				consumerScaler
 		);
 	}
 
