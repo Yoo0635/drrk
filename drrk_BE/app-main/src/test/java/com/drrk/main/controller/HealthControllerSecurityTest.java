@@ -24,6 +24,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpHeaders;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -71,6 +72,9 @@ class HealthControllerSecurityTest {
 
 	@MockitoBean
 	RedisConnectionFactory redisConnectionFactory;
+
+	@MockitoBean(answers = org.mockito.Answers.RETURNS_DEEP_STUBS)
+	StringRedisTemplate stringRedisTemplate;
 
 	@MockitoBean
 	ConnectionFactory rabbitConnectionFactory;

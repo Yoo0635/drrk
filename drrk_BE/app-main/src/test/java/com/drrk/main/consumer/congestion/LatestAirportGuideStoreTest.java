@@ -5,6 +5,14 @@ import static org.junit.jupiter.api.Assertions.assertIterableEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.anyList;
+import static org.mockito.Mockito.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import com.drrk.messaging.congestion.CongestionCalculatedMessage;
 import com.drrk.messaging.congestion.CongestionInputReferences;
@@ -22,12 +30,35 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.HashOperations;
+import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.data.redis.core.script.RedisScript;
 import tools.jackson.databind.ObjectMapper;
 
 class LatestAirportGuideStoreTest {
+
+	@Test
+	void restoresHistoryWhenSpringInitializesTheStore() {
+		Instant now = Instant.parse("2026-08-13T05:11:00Z");
+		ObjectMapper mapper = new ObjectMapper();
+		StringRedisTemplate redis = mock(StringRedisTemplate.class);
+		HashOperations<String, Object, Object> hashes = mock(HashOperations.class);
+		when(redis.opsForHash()).thenReturn(hashes);
+		CongestionSnapshot snapshot = new CongestionSnapshot(calculatedAt(now.minusSeconds(5)),
+				CongestionDeliveryStatus.LIVE, 0, now);
+		when(hashes.values(anyString())).thenReturn(List.of(mapper.writeValueAsString(snapshot)));
+		try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext()) {
+			context.registerBean(LatestAirportGuideStore.class, () -> new LatestAirportGuideStore(
+					redis, mapper, Duration.ofMinutes(10), Clock.fixed(now, ZoneOffset.UTC)));
+			context.refresh();
+			verify(hashes).values("drrk:main:sse:airport-guide:v2:payloads");
+			assertEquals(List.of(snapshot), context.getBean(LatestAirportGuideStore.class).recentSnapshots(now));
+			verify(hashes, times(1)).values(anyString());
+		}
+	}
 
 	@Test
 	void keepsOnlyTheNewestOneHundredTwentyCalculatedResultsAndIgnoresPendingMessages() {
@@ -127,7 +158,7 @@ class LatestAirportGuideStoreTest {
 	void doesNotUpdateLocalCacheWhenRedisUpdateFails() {
 		Instant now = Instant.parse("2026-08-13T05:11:00Z");
 		LatestAirportGuideStore store = new LatestAirportGuideStore(
-				new FailingRedisTemplate(),
+				failingRedis(),
 				new ObjectMapper(),
 				Duration.ofMinutes(10),
 				Clock.fixed(now, ZoneOffset.UTC)
@@ -176,11 +207,86 @@ class LatestAirportGuideStoreTest {
 		);
 	}
 
-	private static final class FailingRedisTemplate extends StringRedisTemplate {
+	private StringRedisTemplate failingRedis() {
+		StringRedisTemplate redis = mock(StringRedisTemplate.class);
+		HashOperations<String, Object, Object> hashes = mock(HashOperations.class);
+		when(redis.opsForHash()).thenReturn(hashes);
+		when(hashes.values(anyString())).thenReturn(List.of());
+		when(redis.execute(any(RedisScript.class), anyList(), any(Object[].class)))
+				.thenThrow(new IllegalStateException("redis unavailable"));
+		return redis;
+	}
 
-		@Override
-		public <T> T execute(RedisScript<T> script, List<String> keys, Object... args) {
-			throw new IllegalStateException("redis unavailable");
+	@Test
+	void restoresRedisHistoryForBothReadPathsAndThenUsesLocalCache() {
+		Instant now = Instant.parse("2026-08-13T05:11:00Z");
+		ObjectMapper mapper = new ObjectMapper();
+		StringRedisTemplate redis = mock(StringRedisTemplate.class);
+		HashOperations<String, Object, Object> hashes = mock(HashOperations.class);
+		when(redis.opsForHash()).thenReturn(hashes);
+		CongestionSnapshot snapshot = new CongestionSnapshot(calculatedAt(now.minusSeconds(5)),
+				CongestionDeliveryStatus.RECOVERED_LATE, 2, now);
+		when(hashes.values("drrk:main:sse:airport-guide:v2:payloads"))
+				.thenReturn(List.of(mapper.writeValueAsString(snapshot)));
+		LatestAirportGuideStore store = new LatestAirportGuideStore(redis, mapper,
+				Duration.ofMinutes(10), Clock.fixed(now, ZoneOffset.UTC));
+
+		assertEquals(snapshot.message(), store.latestFresh(now, Duration.ofSeconds(25)).orElseThrow());
+		assertEquals(List.of(snapshot), store.recentSnapshots(now));
+		verify(hashes, times(1)).values(anyString());
+		verify(redis, never()).execute(any(RedisScript.class), anyList(), any(Object[].class));
+	}
+
+	@Test
+	void restoresOnlyValidRecentHistoryAndEnforcesLimit() {
+		Instant now = Instant.parse("2026-08-13T05:11:00Z");
+		ObjectMapper mapper = new ObjectMapper();
+		StringRedisTemplate redis = mock(StringRedisTemplate.class);
+		HashOperations<String, Object, Object> hashes = mock(HashOperations.class);
+		when(redis.opsForHash()).thenReturn(hashes);
+		List<Object> payloads = new java.util.ArrayList<>();
+		for (int age = 0; age <= 120; age++) {
+			payloads.add(mapper.writeValueAsString(new CongestionSnapshot(calculatedAt(now.minusSeconds(age)),
+					CongestionDeliveryStatus.LIVE, 0, now)));
 		}
+		for (Instant timestamp : List.of(now.minusSeconds(600), now.plusSeconds(1))) {
+			payloads.add(mapper.writeValueAsString(new CongestionSnapshot(calculatedAt(timestamp),
+					CongestionDeliveryStatus.LIVE, 0, now)));
+		}
+		payloads.add("broken json");
+		payloads.add("null");
+		payloads.add("{}");
+		when(hashes.values(anyString())).thenReturn(payloads);
+		LatestAirportGuideStore store = new LatestAirportGuideStore(redis, mapper,
+				Duration.ofMinutes(10), Clock.fixed(now, ZoneOffset.UTC));
+
+		List<CongestionSnapshot> restored = store.recentSnapshots(now);
+		assertEquals(120, restored.size());
+		assertEquals(now.minusSeconds(119), restored.getFirst().message().calculatedAt());
+		assertEquals(now, restored.getLast().message().calculatedAt());
+	}
+
+	@Test
+	void retriesFailedRedisRecoveryAndPreservesConcurrentLocalUpdate() {
+		Instant now = Instant.parse("2026-08-13T05:11:00Z");
+		ObjectMapper mapper = new ObjectMapper();
+		StringRedisTemplate redis = mock(StringRedisTemplate.class);
+		HashOperations<String, Object, Object> hashes = mock(HashOperations.class);
+		when(redis.opsForHash()).thenReturn(hashes);
+		LatestAirportGuideStore store = new LatestAirportGuideStore(redis, mapper,
+				Duration.ofMinutes(10), Clock.fixed(now, ZoneOffset.UTC));
+		CongestionCalculatedMessage message = calculatedAt(now.minusSeconds(5));
+		when(hashes.values(anyString()))
+				.thenThrow(new RedisConnectionFailureException("unavailable"))
+				.thenAnswer(invocation -> {
+					store.handle(message, CongestionDeliveryStatus.RECOVERED_LATE, 2);
+					return List.of(mapper.writeValueAsString(new CongestionSnapshot(message,
+							CongestionDeliveryStatus.LIVE, 0, now)));
+				});
+
+		assertTrue(store.recentSnapshots(now).isEmpty());
+		assertEquals(CongestionDeliveryStatus.RECOVERED_LATE,
+				store.recentSnapshots(now).getFirst().deliveryStatus());
+		verify(hashes, times(2)).values(anyString());
 	}
 }
