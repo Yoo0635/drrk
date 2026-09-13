@@ -1,16 +1,19 @@
 package com.drrk.main.consumer.congestion;
 
 import com.drrk.messaging.congestion.CongestionCalculatedMessage;
+import jakarta.annotation.PostConstruct;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -47,9 +50,8 @@ public class LatestAirportGuideStore {
 			return 1
 			""";
 
-	private final ConcurrentHashMap<String, CongestionSnapshot> recent = new ConcurrentHashMap<>();
-	private final AtomicReference<CongestionSnapshot> latest = new AtomicReference<>();
-	private final Object cacheLock = new Object();
+	private final HashMap<String, CongestionSnapshot> recent = new HashMap<>();
+	private final ReentrantReadWriteLock historyLock = new ReentrantReadWriteLock();
 	private final StringRedisTemplate redis;
 	private final ObjectMapper objectMapper;
 	private final Duration retention;
@@ -95,11 +97,13 @@ public class LatestAirportGuideStore {
 
 		CongestionSnapshot snapshot = new CongestionSnapshot(message, deliveryStatus, retryCount, now);
 		updateRedisHistory(snapshot, now);
-		synchronized (cacheLock) {
+		historyLock.writeLock().lock();
+		try {
 			CongestionSnapshot merged = merge(recent.get(message.messageId()), snapshot);
 			recent.put(message.messageId(), merged);
-			updateLatest(merged);
 			pruneLocked(now);
+		} finally {
+			historyLock.writeLock().unlock();
 		}
 		log.info("[AIRPORT GUIDE UPDATED] calculatedAt={} version={} score={} trainCount={}",
 				message.calculatedAt(),
@@ -121,27 +125,85 @@ public class LatestAirportGuideStore {
 	}
 
 	public List<CongestionSnapshot> recentSnapshots(Instant now) {
-		synchronized (cacheLock) {
-			pruneLocked(now);
-			return recent.values().stream()
-					.filter(snapshot -> isInWindow(snapshot.message().calculatedAt(), now, retention))
-					.sorted(snapshotAscending())
-					.toList();
+		restoreIfEmpty();
+		List<CongestionSnapshot> snapshots;
+		historyLock.readLock().lock();
+		try {
+			snapshots = List.copyOf(recent.values());
+		} finally {
+			historyLock.readLock().unlock();
 		}
+		return snapshots.stream()
+				.filter(snapshot -> isInWindow(snapshot.message().calculatedAt(), now, retention))
+				.sorted(snapshotAscending())
+				.toList();
 	}
 
 	public Optional<CongestionCalculatedMessage> latestFresh(Instant now, Duration maxAge) {
-		CongestionSnapshot snapshot = latest.get();
-		if (snapshot == null || !isInWindow(snapshot.message().calculatedAt(), now, maxAge)) {
-			return Optional.empty();
+		restoreIfEmpty();
+		historyLock.readLock().lock();
+		try {
+			return recent.values().stream()
+					.filter(snapshot -> isInWindow(snapshot.message().calculatedAt(), now, maxAge))
+					.max(snapshotAscending())
+					.map(CongestionSnapshot::message);
+		} finally {
+			historyLock.readLock().unlock();
 		}
-		return Optional.of(snapshot.message());
+	}
+
+	@PostConstruct
+	void restoreIfEmpty() {
+		if (redis == null) {
+			return;
+		}
+		historyLock.readLock().lock();
+		try {
+			if (!recent.isEmpty()) {
+				return;
+			}
+		} finally {
+			historyLock.readLock().unlock();
+		}
+
+		List<Object> payloads;
+		try {
+			payloads = redis.opsForHash().values(PAYLOAD_KEY);
+		} catch (DataAccessException exception) {
+			log.warn("[AIRPORT GUIDE RESTORE FAILED] reason={}", exception.getMessage());
+			return;
+		}
+		List<CongestionSnapshot> restored = new ArrayList<>();
+		for (Object payload : payloads) {
+			try {
+				CongestionSnapshot snapshot = objectMapper.readValue((String) payload, CongestionSnapshot.class);
+				if (snapshot != null && snapshot.message() != null && snapshot.deliveryStatus() != null
+						&& snapshot.receivedAt() != null
+						&& CongestionCalculatedMessage.hasScore(snapshot.message().status())) {
+					restored.add(snapshot);
+				}
+			} catch (JacksonException | IllegalArgumentException exception) {
+				log.warn("[AIRPORT GUIDE RESTORE SKIPPED] reason=INVALID_PAYLOAD");
+			}
+		}
+		historyLock.writeLock().lock();
+		try {
+			for (CongestionSnapshot snapshot : restored) {
+				recent.putIfAbsent(snapshot.message().messageId(), snapshot);
+			}
+			pruneLocked(now());
+		} finally {
+			historyLock.writeLock().unlock();
+		}
 	}
 
 	@Scheduled(fixedRateString = "${congestion.cache.cleanup-fixed-rate:PT1S}")
 	void cleanupExpired() {
-		synchronized (cacheLock) {
+		historyLock.writeLock().lock();
+		try {
 			pruneLocked(now());
+		} finally {
+			historyLock.writeLock().unlock();
 		}
 	}
 
@@ -153,15 +215,6 @@ public class LatestAirportGuideStore {
 			return incoming;
 		}
 		return current;
-	}
-
-	private void updateLatest(CongestionSnapshot incoming) {
-		latest.updateAndGet(current -> {
-			if (current == null || snapshotAscending().compare(incoming, current) >= 0) {
-				return incoming;
-			}
-			return current;
-		});
 	}
 
 	private void updateRedisHistory(CongestionSnapshot snapshot, Instant now) {
@@ -187,7 +240,6 @@ public class LatestAirportGuideStore {
 				|| entry.getValue().message().calculatedAt().isAfter(now));
 		int overflow = recent.size() - HISTORY_LIMIT;
 		if (overflow <= 0) {
-			refreshLatestLocked();
 			return;
 		}
 		recent.values().stream()
@@ -196,13 +248,6 @@ public class LatestAirportGuideStore {
 				.map(snapshot -> snapshot.message().messageId())
 				.toList()
 				.forEach(recent::remove);
-		refreshLatestLocked();
-	}
-
-	private void refreshLatestLocked() {
-		latest.set(recent.values().stream()
-				.max(snapshotAscending())
-				.orElse(null));
 	}
 
 	private static boolean isInWindow(Instant timestamp, Instant now, Duration retention) {

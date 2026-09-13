@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 @SpringBootTest(properties = {
@@ -51,6 +52,9 @@ class MainApplicationTests {
 
 	@MockitoBean
 	RedisConnectionFactory redisConnectionFactory;
+
+	@MockitoBean(answers = org.mockito.Answers.RETURNS_DEEP_STUBS)
+	StringRedisTemplate stringRedisTemplate;
 
 	@MockitoBean
 	ConnectionFactory rabbitConnectionFactory;
