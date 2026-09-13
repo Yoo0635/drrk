@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertIterableEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.drrk.messaging.congestion.CongestionCalculatedMessage;
@@ -14,12 +13,14 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -97,31 +98,27 @@ class LatestAirportGuideStoreTest {
 	}
 
 	@Test
-	void readsLatestWithoutWaitingForHistoryLock() throws Exception {
+	void waitsForWriteLockBeforeReadingLatest() throws Exception {
 		Instant now = Instant.parse("2026-08-13T05:11:00Z");
 		LatestAirportGuideStore store = storeAt(now);
 		CongestionCalculatedMessage latest = calculatedAt(now.minusSeconds(1));
 		store.handle(latest);
-		Object cacheLock = ReflectionTestUtils.getField(store, "cacheLock");
-		assertNotNull(cacheLock);
-		CountDownLatch lockHeld = new CountDownLatch(1);
-		CountDownLatch releaseLock = new CountDownLatch(1);
+		ReentrantReadWriteLock historyLock = (ReentrantReadWriteLock) ReflectionTestUtils.getField(store, "historyLock");
+		assertNotNull(historyLock);
 		ExecutorService executor = Executors.newSingleThreadExecutor();
-		Future<?> holder = executor.submit(() -> {
-			synchronized (cacheLock) {
-				lockHeld.countDown();
-				assertTrue(releaseLock.await(1, TimeUnit.SECONDS));
-			}
-			return null;
-		});
-		assertTrue(lockHeld.await(1, TimeUnit.SECONDS));
+		historyLock.writeLock().lock();
+		Future<Optional<CongestionCalculatedMessage>> reader = executor.submit(() ->
+				store.latestFresh(now, Duration.ofMinutes(10)));
 
 		try {
-			assertTimeoutPreemptively(Duration.ofMillis(100), () ->
-					assertEquals(latest.messageId(), store.latest().orElseThrow().messageId()));
+			assertThrows(TimeoutException.class, () -> reader.get(100, TimeUnit.MILLISECONDS));
 		} finally {
-			releaseLock.countDown();
-			holder.get(1, TimeUnit.SECONDS);
+			historyLock.writeLock().unlock();
+		}
+
+		try {
+			assertEquals(latest.messageId(), reader.get(1, TimeUnit.SECONDS).orElseThrow().messageId());
+		} finally {
 			executor.shutdownNow();
 		}
 	}
